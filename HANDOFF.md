@@ -49,6 +49,7 @@ quality-gate --no-cache          # never trust a cached green
 | `RelyingParty.verifyAuthentication` | Every clause of §7.2, and the counter rule |
 | Both option sets | Algorithms **derived** from what the verifier accepts, never restated |
 | `SwiftWebAuthnIdentity` | The adapter (ADR-002). Passes SwiftIdentity's conformance suite |
+| `webauthn-capture` | Dev tool: captures **and verifies** a real ceremony. Target, no product |
 
 ## The exact next step
 
@@ -61,6 +62,16 @@ Real-device fixtures are **done** (2026-09-08, Apple platform authenticator, in
 opportunistically: **an authenticator whose counter actually increments** — a hardware security
 key, or Windows Hello. Every counter path is unit-tested, but only the zero path has met real
 hardware.
+
+Capturing one is now a single command:
+
+```sh
+swift run webauthn-capture --output Tests/SwiftWebAuthnTests/CapturedCeremonies
+```
+
+then open <http://localhost:8099>. Pass a roaming authenticator by changing `attachment` to
+`.crossPlatform` in `Capture.swift`. The tool verifies before it writes, so a fixture that lands
+on disk has already been proved.
 
 ## Where this is weakest, in order
 
