@@ -5,7 +5,7 @@ option sets, and the `SwiftIdentity` adapter. What remains is **evidence**, not 
 
 **Last updated:** 2026-09-08
 **Branch:** `main`, clean, pushed to `github.com/jpurnell/SwiftWebAuthn` (**private**). No tags.
-**State:** **97 tests** across two test targets, `quality-gate --no-cache` **0 errors, 0
+**State:** **103 tests** across two test targets, `quality-gate --no-cache` **0 errors, 0
 warnings, 45 of 45 checkers**, documentation coverage 100%.
 **Depends on:** `SwiftIdentity` **0.1.0** (private), consumed only by the adapter product.
 
@@ -52,28 +52,30 @@ quality-gate --no-cache          # never trust a cached green
 
 ## The exact next step
 
-**Capture a real ceremony from a real device and turn it into a fixture.** Touch ID on a Mac,
-Face ID on a phone. Everything below depends on it, and no more code will make it true.
+**Run the external bar** — `brokenhandsio/swift-webauthn`'s public suite against this
+implementation, deliberately, as ADR-001 says. It is the last outstanding claim in that decision
+and the only remaining weakness below.
 
-It settles the §10.3 counter rule (weakness 1), gives §6.2 the vectors it calls the most
-valuable available, and is the prerequisite for running the external bar meaningfully.
-
-The code is otherwise done. **Resist adding more of it** — the next real increment is evidence.
+Real-device fixtures are **done** (2026-09-08, Apple platform authenticator, in
+`Tests/SwiftWebAuthnTests/CapturedCeremonies/`). One thing they do *not* cover, worth capturing
+opportunistically: **an authenticator whose counter actually increments** — a hardware security
+key, or Windows Hello. Every counter path is unit-tested, but only the zero path has met real
+hardware.
 
 ## Where this is weakest, in order
 
-1. **The backup-flag rule is a reading, not a measurement.** §10.3 decided that counter
-   regression is an error *only* when a credential is not backed up, because a passkey synced
-   through iCloud Keychain may never increment its counter. That comes from the specification.
-   **It has never been checked against a real device**, and it is now shipped code —
-   `checkCounter` in `RelyingParty`, marked `- Important:` at the site. If the reading is wrong,
-   this package either locks out synced passkeys or fails to notice a cloned authenticator, and
-   there is currently no test that could tell you which.
-
-2. **The external bar has not been run.** ADR-001 rests on it:
+1. **The external bar has not been run.** ADR-001 rests on it:
    `brokenhandsio/swift-webauthn`'s public suite, run against this implementation once the API
    is stable, deliberately and not as a test dependency. **Until it is run, this package has
-   been checked by one party** — which is exactly the risk the adversarial review named.
+   been checked by one party** — which is exactly the risk the adversarial review named, and it
+   is now the only one still standing.
+
+2. **Only the zero counter has met real hardware.** ~~The backup-flag rule is a reading, not a
+   measurement.~~ **Settled 2026-09-08**: an Apple platform authenticator reports BE and BS set
+   with a counter of 0 at registration and 0 again at authentication, so gating regression on
+   the backup flags is correct and refusing a static counter would have locked out the common
+   case. What has *not* been seen on real hardware is a counter that increments — a security key
+   or Windows Hello would show that. Every path is unit-tested; one of them has evidence.
 
 3. **The CBOR decoder is the most likely thing here to be wrong**, and the proposal says so.
    Watch its size: **if the subset starts growing to make a real authenticator work, take the

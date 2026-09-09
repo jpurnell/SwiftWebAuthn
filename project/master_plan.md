@@ -136,8 +136,8 @@ bytes and re-encoding a parsed structure produces different ones.
       suite**: 7 met, 0 failed, 0 inconclusive, 4 honestly declined
 
 ### What's Next
-- [ ] **Ceremonies captured from real devices as fixtures**, which §6.2 calls the most valuable
-      vectors available and which nothing here has yet
+- [x] **Ceremonies captured from real devices**, which §6.2 calls the most valuable vectors
+      available — and which are the only tests here not produced by this package's own code
 - [ ] **The external bar** — `brokenhandsio/swift-webauthn`'s public suite, run against this
       implementation once the API is stable. Until it is run, this package has been checked by
       one party
@@ -187,7 +187,8 @@ This principle is operationalized in the **Adversarial Review** step of `design_
 
 ### Phase 3: Integration and evidence
 - [x] `SwiftWebAuthnIdentity` adapter product, passing SwiftIdentity's conformance suite
-- [ ] **Real-device fixtures** — the outstanding one, and what §10.3 is waiting on
+- [x] **Real-device fixtures** — captured 2026-09-08 from Apple's platform authenticator, and
+      they settle §10.3: BE and BS set, counter 0 across both ceremonies
 - [ ] **The external bar run deliberately** — until it is, this package has been checked by one
       party
 
@@ -198,7 +199,9 @@ This principle is operationalized in the **Adversarial Review** step of `design_
 
 ---
 
-**Last Updated:** 2026-09-08 — Phase 2 (authentication, options) and the adapter product added;
+**Last Updated:** 2026-09-08 — real ceremonies captured from an Apple platform authenticator,
+settling the §10.3 counter rule as a measurement rather than a reading; Phase 2 (authentication,
+options) and the adapter product added;
 proposal approved and §10 answered; ADR-001 and ADR-002 recorded;
 Phase 1 (registration) implemented and reconciled here. Scaffold placeholders in Technology
 Stack, Module Structure, Key Types, Data Flow, Core Architectural Decisions, Current Status and

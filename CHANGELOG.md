@@ -62,6 +62,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reported only for someone who actually holds the private key rather than for anyone who guesses
   an identifier.
 
+- **Ceremonies captured from a real Apple platform authenticator**, and verified end to end.
+  AAGUID `fbfc3007-154e-4ecc-8c0b-6e020557d7bd`, backup flags set, **signature counter 0 at
+  registration and 0 again at authentication** — which settles §10.3 as a measurement rather
+  than a reading of the specification, and confirms that refusing a static counter would have
+  locked out the ordinary case on Apple hardware.
+
+  These are the only tests here whose inputs this package did not produce.
+
 ### Decided
 
 - **Proposal approved 2026-09-08**, with all four open questions answered in §10.
