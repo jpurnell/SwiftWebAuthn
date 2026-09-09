@@ -1,6 +1,6 @@
 # Design Proposal — a WebAuthn relying party, written from the specification
 
-**Status:** Proposed, awaiting approval
+**Status:** **Approved 2026-09-08**, with all four open questions answered — see §10.
 **Date:** 2026-09-02
 **Consumer:** `SwiftIdentity` — passkeys as a credential kind (`SubjectsAndCredentials.md` §4c)
 **Approach decided 2026-09-02:** clean-room, with `brokenhandsio/swift-webauthn` as an external
@@ -144,8 +144,10 @@ to distinguish authenticator makes.
 ## 8. Architecture decision review
 
 - [x] New repository; no prior ADRs.
-- **New ADR on approval:** *implemented from the specification, with an existing implementation
-  kept as an external conformance bar.* Category: architecture.
+- [x] **ADR-001** recorded on approval: *implemented from the specification, with an existing
+  implementation kept as an external conformance bar.* Category: architecture.
+- [x] **ADR-002** recorded on approval: *passkeys reach `SwiftIdentity` through an adapter
+  product, not a dependency* — the answer to §10.1. Category: architecture.
 
 ## 9. Adversarial review
 
@@ -172,17 +174,47 @@ parser, in the same package, for a handful of users." The honest reply is that t
 considered, the bar for replacing this with the maintained package is written down in §6.4, and
 if the CBOR subset grows the decision gets revisited rather than defended.
 
-## 10. Open questions
+## 10. Open questions — all answered 2026-09-08
 
-1. **Does `SwiftIdentity` depend on this, or an adapter between them?** Recommendation: an
-   adapter, so a deployment that never uses passkeys does not link a WebAuthn implementation.
-2. **RS256?** Windows Hello has historically needed it. Recommendation: omit until a device
-   requires it; refuse the algorithm loudly rather than silently.
-3. **What is stored when a credential is backed up to iCloud Keychain?** The backup-eligible and
-   backed-up flags change what a sign counter means — synced passkeys may not increment it at
-   all, which makes counter-regression detection weaker than it appears.
-4. **Where do challenges live?** §5 leaves it to the consumer; `SwiftIdentity` will need an
-   answer before the web UI does.
+1. ~~**Does `SwiftIdentity` depend on this, or an adapter between them?**~~ **An adapter, and it
+   lives here.** A second library product in this package, `SwiftWebAuthnIdentity`, depends on
+   both and declares `PasskeyAssertion: Credential`. `SwiftIdentity` gains no knowledge of
+   WebAuthn and no new dependency.
+
+   The alternative that was rejected is worth naming: had `SwiftIdentity` depended on this
+   package, a calendar feed would link CBOR and attestation parsing in order to verify a
+   capability token. A separate third repository was also rejected — cleanest separation, but a
+   third repo, gate and handoff for one type and one function. Recorded as **ADR-002**.
+
+   This is the concrete payoff of §4b(5) in the consumer's proposal, which made `Credential` a
+   protocol rather than an enum. If this seam turns out awkward, that decision was wrong, and
+   this is where it shows.
+
+2. ~~**RS256?**~~ **No, and refuse it loudly.** Omitted until a device actually requires it.
+   An unsupported algorithm is a named error, never a silent failure to verify — the failure
+   mode being a ceremony that appears to succeed because nothing checked it.
+
+3. ~~**What is stored when a credential is backed up to iCloud Keychain?**~~ **Both flags are
+   recorded, and the counter is only trusted when the credential is not backed up.**
+
+   A synced passkey may never increment its signature counter, so treating a non-incrementing
+   counter as an attack would refuse every legitimate iCloud-synced credential — the failure
+   mode being a defence that locks out the common case. So: `isBackupEligible` and `isBackedUp`
+   are both stored, counter regression is an error only when the credential is not backed up,
+   and when it is backed up a static counter is recorded and accepted.
+
+   **This is the one answer here derived from the specification rather than from evidence.** It
+   must be checked against a real ceremony from a real device before anything relies on it, and
+   §6.2 already calls for those fixtures. Until then it is the best available reading, not a
+   verified fact.
+
+4. ~~**Where do challenges live?**~~ **Not here, deliberately.** This package generates a
+   challenge and compares one; it never remembers. Single-use enforcement is a deployment
+   decision, and a library that hid it would make a replay vulnerability invisible.
+
+   The consequence is stated rather than buried: a consumer that does not enforce single use has
+   a replay vulnerability and this package cannot detect it. `SwiftIdentity` needs an answer
+   before a web UI does, and that answer belongs in `SwiftIdentity`.
 
 ## 11. Documentation strategy
 
