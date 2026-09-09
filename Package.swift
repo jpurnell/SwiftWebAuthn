@@ -57,6 +57,10 @@ let package = Package(
         .testTarget(
             name: "SwiftWebAuthnTests",
             dependencies: ["SwiftWebAuthn"],
+            // Ceremonies captured from a real Apple platform authenticator. Copied rather than
+            // processed: these are exact bytes, and a resource pipeline that normalised anything
+            // would change what the signatures cover.
+            resources: [.copy("CapturedCeremonies")],
             swiftSettings: [
                 .enableUpcomingFeature("ApproachableConcurrency"),
             ]

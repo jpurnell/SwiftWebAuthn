@@ -1,0 +1,8 @@
+{
+  "credentialID": "tg0gOXQE9jXCaKC6rPadugJyvQM",
+  "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoidnZRdE84amRaNUFXWWoxdV9lNllEM2ZmZ0lCZzFCMjZHOVlNWUQ3a3puVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODA5OSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+  "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YViYSZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2NdAAAAAPv8MAcVTk7MjAtuAgVX170AFLYNIDl0BPY1wmiguqz2nboCcr0DpQECAyYgASFYIKeT9BO9jxW7Qsl55jIptpEqrbAeGhCRRbLX7j0bCSwJIlggmpQOh5VE3Wwl290CR-T2PrKs3yqHiRdrYmOmOps2mjs",
+  "challenge": "vvQtO8jdZ5AWYj1u_e6YD3ffgIBg1B26G9YMYD7kznU",
+  "origin": "http://localhost:8099",
+  "relyingPartyID": "localhost"
+}
