@@ -134,6 +134,8 @@ bytes and re-encoding a parsed structure produces different ones.
 - [x] **Both option sets**, with the offered algorithms derived from what the verifier accepts
 - [x] SwiftWebAuthnIdentity — the adapter product, which **passes SwiftIdentity's conformance
       suite**: 7 met, 0 failed, 0 inconclusive, 4 honestly declined
+- [x] webauthn-capture — a development tool that captures **and verifies** a ceremony from real
+      hardware. A target with no product, so nothing can depend on it
 
 ### What's Next
 - [x] **Ceremonies captured from real devices**, which §6.2 calls the most valuable vectors
