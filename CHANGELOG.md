@@ -42,6 +42,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   overload that picks one: this package already declines to own where a challenge is stored, and
   silently choosing the randomness source would hide the same kind of decision.
 
+- **The authentication ceremony (§7.2)**, with the same clauses tested again rather than assumed
+  from registration, and the signature counter gated on the backup flags: regression is an error
+  only for a credential that is **not** backed up, because a passkey synced through a keychain
+  may never increment one and refusing that would lock out the common case rather than the
+  attack.
+
+- **Both option sets**, with the offered algorithms derived from what the verifier accepts rather
+  than listed a second time. Offering an algorithm this package refuses produces a ceremony that
+  fails after the person has already touched the sensor.
+
+- **`SwiftWebAuthnIdentity`** — the adapter product (ADR-002). `PasskeyAssertion` is a
+  `SwiftIdentity.Credential`, and `PasskeyCredentialStore` resolves one to a `Subject` by
+  verifying the ceremony. `SwiftIdentity` gains no knowledge of WebAuthn and no dependency on
+  it, so a service whose clients cannot run a ceremony links none of this.
+
+  **It passes SwiftIdentity's conformance suite** — 7 requirements met, 0 failed, 0 inconclusive,
+  4 honestly declined. Possession is checked before status, so `revoked` and `honeypot` are
+  reported only for someone who actually holds the private key rather than for anyone who guesses
+  an identifier.
+
 ### Decided
 
 - **Proposal approved 2026-09-08**, with all four open questions answered in §10.

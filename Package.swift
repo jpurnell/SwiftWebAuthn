@@ -17,11 +17,22 @@ let package = Package(
             name: "SwiftWebAuthn",
             targets: ["SwiftWebAuthn"]
         ),
+        // The adapter, kept a separate product on purpose (ADR-002): a deployment that never
+        // uses passkeys imports SwiftIdentity alone and links none of this.
+        .library(
+            name: "SwiftWebAuthnIdentity",
+            targets: ["SwiftWebAuthnIdentity"]
+        ),
     ],
     dependencies: [
         // ES256 and Ed25519 verification, and SHA-256 over client data and the RP ID.
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3"),
+        // Consumed only by the adapter product, so a deployment that never uses passkeys
+        // never resolves it. Pinned to a version rather than a branch: a branch dependency
+        // gives a consumer no way to say which version it was built against, which the
+        // dependency auditor says out loud.
+        .package(url: "git@github.com:jpurnell/SwiftIdentity.git", from: "0.1.0"),
     ],
     targets: [
         .target(
@@ -33,9 +44,29 @@ let package = Package(
                 .enableUpcomingFeature("ApproachableConcurrency"),
             ]
         ),
+        .target(
+            name: "SwiftWebAuthnIdentity",
+            dependencies: [
+                "SwiftWebAuthn",
+                .product(name: "SwiftIdentity", package: "SwiftIdentity"),
+            ],
+            swiftSettings: [
+                .enableUpcomingFeature("ApproachableConcurrency"),
+            ]
+        ),
         .testTarget(
             name: "SwiftWebAuthnTests",
             dependencies: ["SwiftWebAuthn"],
+            swiftSettings: [
+                .enableUpcomingFeature("ApproachableConcurrency"),
+            ]
+        ),
+        .testTarget(
+            name: "SwiftWebAuthnIdentityTests",
+            dependencies: [
+                "SwiftWebAuthnIdentity",
+                .product(name: "SwiftIdentityConformance", package: "SwiftIdentity"),
+            ],
             swiftSettings: [
                 .enableUpcomingFeature("ApproachableConcurrency"),
             ]

@@ -130,15 +130,12 @@ bytes and re-encoding a parsed structure produces different ones.
 - [x] **`Challenge`**, generated from an injected generator
 - [x] **The registration ceremony**, every clause of §7.1 a named error and a named test,
       including a self-attestation signature verified for real
+- [x] **The authentication ceremony** (§7.2), and the signature counter gated on the backup flags
+- [x] **Both option sets**, with the offered algorithms derived from what the verifier accepts
+- [x] SwiftWebAuthnIdentity — the adapter product, which **passes SwiftIdentity's conformance
+      suite**: 7 met, 0 failed, 0 inconclusive, 4 honestly declined
 
 ### What's Next
-- [ ] **The authentication ceremony** (§7.2) and the counter handling that goes with it —
-      including the backup-flag rule from §10.3, which is currently a reading of the
-      specification and not yet checked against a real device
-- [ ] **The options types both ceremonies need** — `PublicKeyCredentialCreationOptions` and
-      `PublicKeyCredentialRequestOptions`. Deliberately not built alongside registration: they
-      are one consistent piece of work and splitting them would have produced two half-shapes
-- [ ] **`SwiftWebAuthnIdentity`** — the adapter product, `PasskeyAssertion: Credential`
 - [ ] **Ceremonies captured from real devices as fixtures**, which §6.2 calls the most valuable
       vectors available and which nothing here has yet
 - [ ] **The external bar** — `brokenhandsio/swift-webauthn`'s public suite, run against this
@@ -183,15 +180,16 @@ This principle is operationalized in the **Adversarial Review** step of `design_
 - [x] CBOR subset, COSE keys, authenticator data, client data, challenges
 - [x] `verifyRegistration`, with `none` and self attestation
 
-### Phase 2: Authentication
-- [ ] `verifyAuthentication` (§7.2)
-- [ ] Signature-counter regression, gated on the backup flags
-- [ ] Options types for both ceremonies
+### Phase 2: Authentication — **complete**
+- [x] `verifyAuthentication` (§7.2)
+- [x] Signature-counter regression, gated on the backup flags
+- [x] Options types for both ceremonies
 
 ### Phase 3: Integration and evidence
-- [ ] `SwiftWebAuthnIdentity` adapter product
-- [ ] Real-device fixtures
-- [ ] The external bar run deliberately
+- [x] `SwiftWebAuthnIdentity` adapter product, passing SwiftIdentity's conformance suite
+- [ ] **Real-device fixtures** — the outstanding one, and what §10.3 is waiting on
+- [ ] **The external bar run deliberately** — until it is, this package has been checked by one
+      party
 
 ### Future
 - Full `packed` / `tpm` / `apple-appattest` attestation, **only** if something needs to
@@ -200,7 +198,8 @@ This principle is operationalized in the **Adversarial Review** step of `design_
 
 ---
 
-**Last Updated:** 2026-09-08 — proposal approved and §10 answered; ADR-001 and ADR-002 recorded;
+**Last Updated:** 2026-09-08 — Phase 2 (authentication, options) and the adapter product added;
+proposal approved and §10 answered; ADR-001 and ADR-002 recorded;
 Phase 1 (registration) implemented and reconciled here. Scaffold placeholders in Technology
 Stack, Module Structure, Key Types, Data Flow, Core Architectural Decisions, Current Status and
 Roadmap were replaced with what is actually true, having survived from the 2026-09-02 scaffold.
