@@ -95,6 +95,22 @@ public indirect enum CBOR: Sendable, Equatable {
         }
         return value
     }
+
+    /// Decodes one item from the start of `bytes` and reports how many bytes it took.
+    ///
+    /// Needed because a credential's public key sits inside authenticator data with **no length
+    /// prefix** — the only way to find where it ends is to decode it. ``CBOR/decode(_:)`` stays
+    /// strict about trailing bytes; this is the deliberate exception, and callers are expected
+    /// to account for what follows rather than ignore it.
+    ///
+    /// - Parameter bytes: A buffer beginning with one complete item.
+    /// - Returns: The item, and the number of bytes it occupied.
+    /// - Throws: ``CBOR/Failure``.
+    public static func decodePrefix(_ bytes: [UInt8]) throws -> (value: CBOR, consumed: Int) {
+        var reader = Reader(bytes: bytes)
+        let value = try reader.item(depth: 0)
+        return (value, reader.cursor)
+    }
 }
 
 /// The cursor, kept out of ``CBOR`` so the public surface stays the shape and its failures.

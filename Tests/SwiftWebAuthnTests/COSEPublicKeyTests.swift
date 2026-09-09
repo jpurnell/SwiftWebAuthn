@@ -11,46 +11,12 @@ import Testing
 @Suite("COSE — the keys accepted, and the algorithms refused")
 struct COSEPublicKeyTests {
 
-    // MARK: - Building COSE structures by hand
-
-    /// A definite-length byte string header, in the shortest form the decoder will accept.
-    static func byteString(_ bytes: [UInt8]) -> [UInt8] {
-        precondition(bytes.count >= 24 && bytes.count <= 255, "only the width these tests use")
-        return [0x58, UInt8(bytes.count)] + bytes
-    }
-
-    /// An EC2 COSE key: `{1: 2, 3: alg, -1: crv, -2: x, -3: y}`.
-    static func ec2Key(algorithm: [UInt8], curve: [UInt8], x: [UInt8], y: [UInt8]) -> [UInt8] {
-        [0xA5]
-            + [0x01, 0x02]
-            + [0x03] + algorithm
-            + [0x20] + curve
-            + [0x21] + byteString(x)
-            + [0x22] + byteString(y)
-    }
-
-    /// An OKP COSE key: `{1: 1, 3: alg, -1: crv, -2: x}`.
-    static func okpKey(algorithm: [UInt8], curve: [UInt8], x: [UInt8]) -> [UInt8] {
-        [0xA4]
-            + [0x01, 0x01]
-            + [0x03] + algorithm
-            + [0x20] + curve
-            + [0x21] + byteString(x)
-    }
-
-    /// A real P-256 public key, split into the coordinates COSE carries separately.
-    static func p256Coordinates() -> (x: [UInt8], y: [UInt8], x963: [UInt8]) {
-        let key = P256.Signing.PrivateKey().publicKey
-        let x963 = Array(key.x963Representation)          // 0x04 ‖ x ‖ y
-        return (Array(x963[1..<33]), Array(x963[33..<65]), x963)
-    }
-
     // MARK: - The keys it must read
 
     @Test("an ES256 key, reassembled from a real P-256 point")
     func es256IsParsed() throws {
-        let point = Self.p256Coordinates()
-        let key = try COSEPublicKey(Self.ec2Key(algorithm: [0x26], curve: [0x01], x: point.x, y: point.y))
+        let point = Fixtures.p256()
+        let key = try COSEPublicKey(Fixtures.ec2Key(algorithm: [0x26], curve: [0x01], x: point.x, y: point.y))
 
         #expect(key.algorithm == .es256)
         // Stored in the form the verifier needs, so nothing reassembles coordinates later.
@@ -60,7 +26,7 @@ struct COSEPublicKeyTests {
     @Test("an EdDSA key")
     func eddsaIsParsed() throws {
         let raw = Array(Curve25519.Signing.PrivateKey().publicKey.rawRepresentation)
-        let key = try COSEPublicKey(Self.okpKey(algorithm: [0x27], curve: [0x06], x: raw))
+        let key = try COSEPublicKey(Fixtures.okpKey(algorithm: [0x27], curve: [0x06], x: raw))
 
         #expect(key.algorithm == .eddsa)
         #expect(key.keyData == raw)
@@ -68,8 +34,8 @@ struct COSEPublicKeyTests {
 
     @Test("a parsed key survives a round trip, because a consumer has to store it")
     func parsedKeyIsCodable() throws {
-        let point = Self.p256Coordinates()
-        let key = try COSEPublicKey(Self.ec2Key(algorithm: [0x26], curve: [0x01], x: point.x, y: point.y))
+        let point = Fixtures.p256()
+        let key = try COSEPublicKey(Fixtures.ec2Key(algorithm: [0x26], curve: [0x01], x: point.x, y: point.y))
 
         let encoded = try JSONEncoder().encode(key)
         #expect(try JSONDecoder().decode(COSEPublicKey.self, from: encoded) == key)
@@ -97,22 +63,22 @@ struct COSEPublicKeyTests {
 
     @Test("an algorithm that does not belong to the curve it was sent with")
     func algorithmAndCurveMustAgree() {
-        let point = Self.p256Coordinates()
+        let point = Fixtures.p256()
         // ES256 declared over Ed25519's curve identifier.
         #expect(throws: COSEPublicKey.Failure.algorithmCurveMismatch(algorithm: -7, curve: 6)) {
-            try COSEPublicKey(Self.ec2Key(algorithm: [0x26], curve: [0x06], x: point.x, y: point.y))
+            try COSEPublicKey(Fixtures.ec2Key(algorithm: [0x26], curve: [0x06], x: point.x, y: point.y))
         }
     }
 
     @Test("a coordinate of the wrong length")
     func wrongCoordinateLengthIsRefused() {
-        let point = Self.p256Coordinates()
+        let point = Fixtures.p256()
         let truncated = Array(point.x[0..<31]) + [0x00] // still 32 to build, then cut the y
         _ = truncated
         #expect(throws: COSEPublicKey.Failure.malformedCoordinate(label: -3, expected: 32, actual: 31)) {
             try COSEPublicKey([0xA5]
                 + [0x01, 0x02] + [0x03, 0x26] + [0x20, 0x01]
-                + [0x21] + Self.byteString(point.x)
+                + [0x21] + Fixtures.byteString(point.x)
                 + [0x22, 0x58, 0x1F] + Array(point.y[0..<31]))
         }
     }
@@ -124,7 +90,7 @@ struct COSEPublicKeyTests {
         // rather than merely measured.
         let notAPoint = [UInt8](repeating: 0xAA, count: 32)
         #expect(throws: COSEPublicKey.Failure.invalidPublicKey) {
-            try COSEPublicKey(Self.ec2Key(algorithm: [0x26], curve: [0x01], x: notAPoint, y: notAPoint))
+            try COSEPublicKey(Fixtures.ec2Key(algorithm: [0x26], curve: [0x01], x: notAPoint, y: notAPoint))
         }
     }
 

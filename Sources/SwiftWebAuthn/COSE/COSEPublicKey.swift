@@ -60,7 +60,18 @@ public struct COSEPublicKey: Sendable, Equatable, Codable {
     /// - Parameter bytes: The CBOR-encoded COSE_Key structure.
     /// - Throws: ``COSEPublicKey/Failure``, or ``CBOR/Failure`` if the CBOR itself is refused.
     public init(_ bytes: [UInt8]) throws {
-        guard case .map(let fields) = try CBOR.decode(bytes) else { throw Failure.notAMap }
+        try self.init(CBOR.decode(bytes))
+    }
+
+    /// Parses an already-decoded COSE_Key.
+    ///
+    /// The entry point used when the key was found inside a larger structure, so authenticator
+    /// data does not decode the same bytes twice to learn where they ended.
+    ///
+    /// - Parameter value: The decoded COSE_Key map.
+    /// - Throws: ``COSEPublicKey/Failure``.
+    public init(_ value: CBOR) throws {
+        guard case .map(let fields) = value else { throw Failure.notAMap }
 
         // The algorithm is read before the key type, deliberately. An RSA key carries both an
         // unsupported type and an unsupported algorithm, and "RS256 is not verified here" is the
