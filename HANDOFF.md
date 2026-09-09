@@ -1,18 +1,19 @@
 # HANDOFF
 
-**Active feature:** Phase 1 (**registration**) is complete. Phase 2 (**authentication**) has not
-started.
+**Active feature:** none in flight. Phases 1–3 of the roadmap are done: both ceremonies, both
+option sets, and the `SwiftIdentity` adapter. What remains is **evidence**, not code.
 
 **Last updated:** 2026-09-08
 **Branch:** `main`, clean, pushed to `github.com/jpurnell/SwiftWebAuthn` (**private**). No tags.
-**State:** **67 tests** in 9 suites, `quality-gate --no-cache` **0 errors, 0 warnings, 45 of 45
-checkers**, documentation coverage 100%.
+**State:** **97 tests** across two test targets, `quality-gate --no-cache` **0 errors, 0
+warnings, 45 of 45 checkers**, documentation coverage 100%.
+**Depends on:** `SwiftIdentity` **0.1.0** (private), consumed only by the adapter product.
 
 ## What this package is
 
-The **server's half** of WebAuthn, written from the W3C specification: verifying the registration
-ceremony and — not yet — the authentication ceremony. It is not an authenticator and does not
-touch the browser side.
+The **server's half** of WebAuthn, written from the W3C specification: verifying both ceremonies
+and vending the options that start them. It is not an authenticator and does not touch the
+browser side.
 
 Its consumer is `SwiftIdentity`, where passkeys replace the *passphrase* — never the capability
 token, because a shared speaker and a calendar client cannot run a ceremony at all.
@@ -45,23 +46,29 @@ quality-gate --no-cache          # never trust a cached green
 | `Base64URL`, `CollectedClientData` | Raw bytes kept, because signatures cover bytes |
 | `Challenge` | Generated from an **injected** generator |
 | `RelyingParty.verifyRegistration` | Every clause of §7.1, `none` and self attestation |
+| `RelyingParty.verifyAuthentication` | Every clause of §7.2, and the counter rule |
+| Both option sets | Algorithms **derived** from what the verifier accepts, never restated |
+| `SwiftWebAuthnIdentity` | The adapter (ADR-002). Passes SwiftIdentity's conformance suite |
 
 ## The exact next step
 
-**`verifyAuthentication` (§7.2), together with both options types.** The options were held back
-from Phase 1 on purpose — `PublicKeyCredentialCreationOptions` and
-`PublicKeyCredentialRequestOptions` are one consistent piece of work, and building only the
-registration half would have produced two shapes that had to agree later.
+**Capture a real ceremony from a real device and turn it into a fixture.** Touch ID on a Mac,
+Face ID on a phone. Everything below depends on it, and no more code will make it true.
 
-Counter handling comes with it, and carries the one soft spot below.
+It settles the §10.3 counter rule (weakness 1), gives §6.2 the vectors it calls the most
+valuable available, and is the prerequisite for running the external bar meaningfully.
+
+The code is otherwise done. **Resist adding more of it** — the next real increment is evidence.
 
 ## Where this is weakest, in order
 
 1. **The backup-flag rule is a reading, not a measurement.** §10.3 decided that counter
    regression is an error *only* when a credential is not backed up, because a passkey synced
    through iCloud Keychain may never increment its counter. That comes from the specification.
-   **It has never been checked against a real device**, and Phase 2 depends on it being right.
-   §6.2 calls real-device ceremonies the most valuable vectors available; there are none yet.
+   **It has never been checked against a real device**, and it is now shipped code —
+   `checkCounter` in `RelyingParty`, marked `- Important:` at the site. If the reading is wrong,
+   this package either locks out synced passkeys or fails to notice a cloned authenticator, and
+   there is currently no test that could tell you which.
 
 2. **The external bar has not been run.** ADR-001 rests on it:
    `brokenhandsio/swift-webauthn`'s public suite, run against this implementation once the API
@@ -91,5 +98,6 @@ Counter handling comes with it, and carries the one soft spot below.
 - **`.quality-gate.yml` names the judgement corpus** and says why in the file: deleting the block
   would not fail the consistency checker, it would make it *skip*. Path is relative. Revisit if
   this package is ever made public.
-- **No tag.** Nothing is released, and nothing should be until the authentication ceremony
-  exists — half a relying party is not a version.
+- **No tag.** Nothing is released. The ceremonies exist now, so the bar has moved: **do not tag
+  until a real ceremony has been verified end to end**, because a version number is a claim that
+  this works against a device and nothing here has met one.
