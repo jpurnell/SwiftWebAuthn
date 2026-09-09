@@ -89,12 +89,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **ADR-002** — passkeys reach `SwiftIdentity` through an adapter product rather than a
   dependency, so a consumer whose clients cannot run a ceremony links none of this.
 
-- **The external bar was run** (2026-09-09), discharging ADR-001's outstanding claim. Sixteen
+- **The external bar was run** (2026-09-09), discharging ADR-001's outstanding claim: 34
   ceremonies, the identical bytes handed to this implementation and to
-  `brokenhandsio/swift-webauthn`: **14 agreements, 2 disagreements**, both understood and written
-  up in `project/external-bar/`. One is a laxity on their side — trailing bytes after an
-  attestation object are ignored — and the other is a signature-counter policy where §7.2 leaves
-  the choice to the relying party.
+  `brokenhandsio/swift-webauthn`. **28 agreements, 6 disagreements**, every one understood and
+  written up in `project/external-bar/`. All six remaining are their CBOR decoder accepting what
+  CTAP2 canonical encoding form forbids — trailing bytes, appended items, non-canonical lengths,
+  indefinite-length maps.
+
+### Changed
+
+- **`SignatureCounterPolicy`, and a default that reverses a guess.** This package used to accept
+  a stalled signature counter whenever the credential reported itself backed up, citing the
+  real-device capture as evidence. The external bar showed the capture does not reach that
+  branch — an Apple passkey reports zero throughout, so the both-zero carve-out fires first and
+  a second implementation with no backup rule accepts the same ceremonies.
+
+  The rule had no evidence, and it weakened cloning detection precisely where the signal might
+  still mean something: an authenticator reporting a non-zero counter is one that keeps a
+  counter. §7.2 says a relying party SHOULD apply its own risk policy, so this package stopped
+  deciding — `refuseWhenStalled` (the new default), `allowWhenBackedUp` (the old behaviour, for
+  a deployment that has met such an authenticator), or `report`.
+
+  `VerifiedAuthentication.counterStalled` carries the signal under every policy, so it is never
+  lost.
 
 - Removed the scaffold's `public enum SwiftWebAuthn {}`, which shadowed the module name and made
   `SwiftWebAuthn.RelyingParty` fail to resolve for any consumer that needed to disambiguate.

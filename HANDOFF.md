@@ -58,8 +58,10 @@ and the external bar are all done, and ADR-001 has no unmet claims left.
 
 The two things worth doing when the opportunity arises, neither of them urgent:
 
-1. **Report the trailing-bytes laxity upstream** — see `project/external-bar/README.md`. They
-   accept bytes appended after an attestation object; we refuse them.
+1. **Report the CBOR laxity upstream** — see `project/external-bar/README.md`. Six payloads that
+   CTAP2 canonical encoding form forbids are accepted by `brokenhandsio/swift-webauthn`; the
+   sharpest is a complete second CBOR item riding along inside an attestation object, which is
+   the parser-differential class.
 2. **Capture an authenticator whose counter increments** (below).
 
 Real-device fixtures are **done** (2026-09-08, Apple platform authenticator, in
@@ -87,12 +89,15 @@ on disk has already been proved.
    misreading**, and a differential test cannot see a step both of them skipped. Fourteen
    agreements is evidence, not proof.
 
-2. **Only the zero counter has met real hardware.** ~~The backup-flag rule is a reading, not a
-   measurement.~~ **Settled 2026-09-08**: an Apple platform authenticator reports BE and BS set
-   with a counter of 0 at registration and 0 again at authentication, so gating regression on
-   the backup flags is correct and refusing a static counter would have locked out the common
-   case. What has *not* been seen on real hardware is a counter that increments — a security key
-   or Windows Hello would show that. Every path is unit-tested; one of them has evidence.
+2. **Only the zero counter has met real hardware, and that is narrower than it sounds.** The
+   capture proves the *both-zero* carve-out: an authenticator that keeps no counter must not be
+   treated as having stalled. It does **not** prove anything about a credential that reports a
+   non-zero counter, because an Apple passkey never does — which is why the backup-flag rule
+   built on top of it was withdrawn (see ``SignatureCounterPolicy``).
+
+   Still unseen on real hardware: **a counter that increments**. A security key or Windows Hello
+   would show one, and would be the first evidence about the branch that is now defaulted to
+   refusal.
 
 3. **The CBOR decoder is the most likely thing here to be wrong**, and the proposal says so.
    Watch its size: **if the subset starts growing to make a real authenticator work, take the

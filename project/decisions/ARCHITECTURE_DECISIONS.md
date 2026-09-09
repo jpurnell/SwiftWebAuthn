@@ -77,12 +77,21 @@ consequences: |
   not eliminated by care, it is mitigated by the external bar — which only helps once it is
   actually run.
 
-  The bar was run on 2026-09-09 against brokenhandsio/swift-webauthn at 2b6b4d4: sixteen
-  ceremonies, the same bytes to both verifiers, 14 agreements and 2 disagreements. One is a
-  laxity on their side (trailing bytes after the attestation object are ignored); the other is a
-  signature-counter policy where both behaviours are conformant, because §7.2 says a relying
-  party SHOULD apply its own risk policy rather than mandating refusal. Written up in
-  project/external-bar/README.md.
+  The bar was run on 2026-09-09 against brokenhandsio/swift-webauthn at 2b6b4d4 — 34 ceremonies,
+  the same bytes to both verifiers — and it earned its place immediately by finding a defect here
+  rather than there.
+
+  It showed that this package's signature-counter rule was a guess. The rule said a stalled
+  counter is acceptable whenever a credential is backed up, and the real-device capture was cited
+  as evidence for it. Replaying those captured ceremonies through both implementations showed
+  both accept them, because an Apple passkey reports zero throughout and both take the both-zero
+  carve-out. The disputed branch was never reached: an Apple-shaped oracle, and a case that is
+  not Apple-shaped. The rule became SignatureCounterPolicy, defaulting to refusal, and the ten
+  counter cases now agree ten out of ten.
+
+  Six disagreements remain, all one thing: their CBOR decoder accepts trailing bytes, appended
+  items, non-canonical lengths and indefinite-length maps, none of which CTAP2 canonical encoding
+  form permits. Written up in project/external-bar/README.md.
 
   What that does NOT establish: that either implementation is correct. Two implementations can
   share a misreading, and a differential test cannot see a step both of them skipped.

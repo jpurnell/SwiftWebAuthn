@@ -38,6 +38,7 @@ public struct PasskeyCredentialStore: CredentialStore {
     private let relyingParty: RelyingParty
     private let directory: any PasskeyDirectory
     private let requiringUserVerification: Bool
+    private let counterPolicy: SignatureCounterPolicy
     private let onFailure: FailureObserver?
 
     /// Builds a store over a directory.
@@ -49,6 +50,8 @@ public struct PasskeyCredentialStore: CredentialStore {
     ///     merely present. `true` by default, matching both ceremonies' own default and what
     ///     ``SwiftWebAuthn/RelyingParty/authenticationOptions(challenge:allowing:userVerification:)``
     ///     asks the browser for.
+    ///   - counterPolicy: What a stalled signature counter means here. Defaults to
+    ///     ``SwiftWebAuthn/SignatureCounterPolicy/refuseWhenStalled``, the careful answer.
     ///   - onFailure: Handed the reason a ceremony was refused. Wire it to whatever this
     ///     deployment logs with — this package takes no logging dependency, because a library
     ///     that picks a logging backend picks it for everyone.
@@ -56,11 +59,13 @@ public struct PasskeyCredentialStore: CredentialStore {
         relyingParty: RelyingParty,
         directory: any PasskeyDirectory,
         requiringUserVerification: Bool = true,
+        counterPolicy: SignatureCounterPolicy = .refuseWhenStalled,
         onFailure: FailureObserver? = nil
     ) {
         self.relyingParty = relyingParty
         self.directory = directory
         self.requiringUserVerification = requiringUserVerification
+        self.counterPolicy = counterPolicy
         self.onFailure = onFailure
     }
 
@@ -85,7 +90,8 @@ public struct PasskeyCredentialStore: CredentialStore {
                 assertion.response,
                 expecting: assertion.challenge,
                 against: registration.credential,
-                requiringUserVerification: requiringUserVerification
+                requiringUserVerification: requiringUserVerification,
+                counterPolicy: counterPolicy
             )
         } catch {
             // Every ceremony failure collapses to `unknown` for the caller. The specific clause

@@ -96,6 +96,35 @@ public struct AuthenticationResponse: Sendable {
     }
 }
 
+/// What to do about a signature counter that did not advance.
+///
+/// §7.2 calls a stalled counter "a signal that the authenticator may be cloned" and says the
+/// relying party **SHOULD apply its own risk policy**. It does not say to refuse. So this package
+/// does not decide on a deployment's behalf — it offers the three answers and defaults to the
+/// careful one.
+public enum SignatureCounterPolicy: Sendable, Equatable {
+    /// Refuse a ceremony whose counter did not advance. **The default.**
+    ///
+    /// Chosen because the alternative is a bet. An authenticator reporting a non-zero counter is
+    /// one that *keeps* a counter, and a regression there might still mean what the
+    /// specification says it means.
+    case refuseWhenStalled
+
+    /// Refuse a stalled counter unless the credential reports itself backed up.
+    ///
+    /// The reading that a synced credential's counter is per-device and therefore meaningless.
+    /// Plausible, and **unmeasured**: every platform authenticator seen so far reports zero from
+    /// registration onward, which never reaches this branch. For a deployment that has met an
+    /// authenticator which both syncs and counts, this is the setting that says so.
+    case allowWhenBackedUp
+
+    /// Never refuse; report it on ``VerifiedAuthentication/counterStalled`` instead.
+    ///
+    /// The most literal reading of "apply its own risk policy": the ceremony's cryptography is
+    /// verified either way, and what a stalled counter is worth is the consumer's judgement.
+    case report
+}
+
 /// The outcome of a verified authentication, and the state the consumer must write back.
 public struct VerifiedAuthentication: Sendable, Equatable {
     /// The credential that answered.
@@ -108,8 +137,17 @@ public struct VerifiedAuthentication: Sendable, Equatable {
     /// Whether the credential is now backed up.
     ///
     /// Returned because it **changes after registration** — a credential enrolled on one device
-    /// becomes backed up the moment it syncs. Persist it: the counter rule reads it.
+    /// becomes backed up the moment it syncs. Persist it.
     public let isBackedUp: Bool
+
+    /// Whether the signature counter failed to advance.
+    ///
+    /// Reported on every verification, whatever ``SignatureCounterPolicy`` was in force, so a
+    /// consumer can act on it even when this package was told not to refuse.
+    ///
+    /// False when **both** counters are zero: an authenticator that keeps no counter has not
+    /// stalled, it has nothing to stall. That is the ordinary case on Apple hardware.
+    public let counterStalled: Bool
 }
 
 /// The server side of WebAuthn: one relying party, and the ceremonies it will verify.
@@ -156,8 +194,10 @@ public struct RelyingParty: Sendable {
         case assertionSignatureInvalid
         /// The signature counter did not advance on a credential that should increment it.
         ///
-        /// Evidence of a cloned authenticator — but only for a credential that is **not** backed
-        /// up. See ``verifyAuthentication(_:expecting:against:requiringUserVerification:)``.
+        /// Thrown when a stalled counter is refused, which depends on ``SignatureCounterPolicy``.
+        ///
+        /// The specification calls a stalled counter a signal that an authenticator may be
+        /// cloned; it does not call it proof, and it leaves the response to the relying party.
         case signatureCounterRegressed(stored: UInt32, received: UInt32)
     }
 
@@ -313,13 +353,16 @@ public struct RelyingParty: Sendable {
     ///   - credential: The stored credential this assertion claims to be from.
     ///   - requiringUserVerification: Whether the person must have been identified rather than
     ///     merely present. Defaults to `true`.
+    ///   - counterPolicy: What a stalled signature counter means here. Defaults to
+    ///     ``SignatureCounterPolicy/refuseWhenStalled``.
     /// - Returns: The outcome, carrying the counter and backup state to persist.
     /// - Throws: ``RelyingParty/Failure``, or the parsing failure underneath it.
     public func verifyAuthentication(
         _ response: AuthenticationResponse,
         expecting challenge: Challenge,
         against credential: RegisteredCredential,
-        requiringUserVerification: Bool = true
+        requiringUserVerification: Bool = true,
+        counterPolicy: SignatureCounterPolicy = .refuseWhenStalled
     ) throws -> VerifiedAuthentication {
         // Checked first: everything below verifies against `credential`, and doing that work for
         // an assertion from a different credential would be answering a question nobody asked.
@@ -360,44 +403,46 @@ public struct RelyingParty: Sendable {
             throw Failure.assertionSignatureInvalid
         }
 
-        try checkCounter(
-            received: authenticatorData.signCount,
-            against: credential,
-            isBackedUp: authenticatorData.flags.isBackedUp
+        let stalled = Self.counterStalled(
+            received: authenticatorData.signCount, stored: credential.signCount
         )
+        let backedUp = authenticatorData.flags.isBackedUp || credential.isBackedUp
+
+        if stalled {
+            switch counterPolicy {
+            case .refuseWhenStalled:
+                throw Failure.signatureCounterRegressed(
+                    stored: credential.signCount, received: authenticatorData.signCount
+                )
+            case .allowWhenBackedUp where !backedUp:
+                throw Failure.signatureCounterRegressed(
+                    stored: credential.signCount, received: authenticatorData.signCount
+                )
+            case .allowWhenBackedUp, .report:
+                break
+            }
+        }
 
         return VerifiedAuthentication(
             credentialID: credential.id,
             newSignCount: authenticatorData.signCount,
             userVerified: authenticatorData.flags.userVerified,
-            isBackedUp: authenticatorData.flags.isBackedUp
+            isBackedUp: authenticatorData.flags.isBackedUp,
+            counterStalled: stalled
         )
     }
 
-    /// The signature-counter rule, which is §10.3 and is the softest thing in this package.
+    /// Whether a counter failed to advance, which is an observation rather than a verdict.
     ///
-    /// A counter that fails to advance is the specification's evidence of a cloned
-    /// authenticator. It is only evidence for a credential that **increments one at all**, and
-    /// two cases do not:
+    /// Zero on both sides is an authenticator that keeps no counter. There is nothing to compare,
+    /// so nothing has stalled — and calling it a stall would condemn every such device. This is
+    /// the branch the Apple platform authenticator takes, at registration and ever afterwards.
     ///
-    /// - An authenticator that never implements a counter reports zero forever.
-    /// - **A passkey synced through a keychain may never increment it**, because the counter is
-    ///   per-device state and the credential is not.
-    ///
-    /// So regression is an error only when the credential is not backed up. Refusing otherwise
-    /// would lock out every synced passkey, which is the common case rather than the attack.
-    ///
-    /// - Important: This rule is read from the specification and has **not** been checked
-    ///   against a real device. It is the first thing to verify once real-device fixtures exist.
-    private func checkCounter(
-        received: UInt32, against credential: RegisteredCredential, isBackedUp: Bool
-    ) throws {
-        // Zero on both sides is an authenticator that does not keep one. There is nothing to
-        // compare, and treating it as regression would refuse every such device.
-        if received == 0 && credential.signCount == 0 { return }
-        if received > credential.signCount { return }
-        if isBackedUp || credential.isBackedUp { return }
-        throw Failure.signatureCounterRegressed(stored: credential.signCount, received: received)
+    /// What to *do* about a stall is ``SignatureCounterPolicy``, and it is deliberately not
+    /// decided here.
+    private static func counterStalled(received: UInt32, stored: UInt32) -> Bool {
+        if received == 0 && stored == 0 { return false }
+        return received <= stored
     }
 
     /// Checks the attestation statement, as far as this package will believe one.

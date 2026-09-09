@@ -25,13 +25,16 @@ struct AuthenticationCeremonyTests {
     }
 
     static func verify(
-        _ assertion: Fixtures.Assertion, requiringUserVerification: Bool = true
+        _ assertion: Fixtures.Assertion,
+        requiringUserVerification: Bool = true,
+        counterPolicy: SignatureCounterPolicy = .refuseWhenStalled
     ) throws -> VerifiedAuthentication {
         try party.verifyAuthentication(
             response(assertion),
             expecting: Challenge(assertion.challenge),
             against: assertion.credential,
-            requiringUserVerification: requiringUserVerification
+            requiringUserVerification: requiringUserVerification,
+            counterPolicy: counterPolicy
         )
     }
 
@@ -87,16 +90,64 @@ struct AuthenticationCeremonyTests {
         }
     }
 
-    @Test("the same counter on a backed-up credential, which a synced passkey does not increment")
-    func aStaticCounterIsAcceptedWhenBackedUp() throws {
+    @Test("a stalled counter on a backed-up credential is refused by default, and that is a change")
+    func aStalledCounterOnABackedUpCredentialIsRefusedByDefault() throws {
         let assertion = try Fixtures.assertion(
             flags: Fixtures.Flag.userPresent | Fixtures.Flag.userVerified
                 | Fixtures.Flag.backupEligible | Fixtures.Flag.backedUp,
             signCount: 0, storedSignCount: 8, storedIsBackedUp: true
         )
-        // Refusing this would lock out every iCloud-synced passkey. §10.3, and the one rule here
-        // that comes from reading the specification rather than from a real device.
-        #expect(try Self.verify(assertion).newSignCount == 0)
+
+        // This package used to accept it, on the reading that a synced passkey may never
+        // increment. That reading is right about the *Apple* case — where both counters are zero
+        // and the branch below is never reached — and has no evidence behind it for a credential
+        // that reports a non-zero counter and then goes backwards. An authenticator that keeps a
+        // counter at all is one whose regression might still mean something.
+        #expect(throws: RelyingParty.Failure.signatureCounterRegressed(stored: 8, received: 0)) {
+            try Self.verify(assertion)
+        }
+    }
+
+    @Test("a deployment that has met such an authenticator can say so")
+    func theBackupFlagCanStillBeTrustedOnRequest() throws {
+        let assertion = try Fixtures.assertion(
+            flags: Fixtures.Flag.userPresent | Fixtures.Flag.userVerified
+                | Fixtures.Flag.backupEligible | Fixtures.Flag.backedUp,
+            signCount: 0, storedSignCount: 8, storedIsBackedUp: true
+        )
+        let verified = try Self.verify(assertion, counterPolicy: .allowWhenBackedUp)
+        #expect(verified.newSignCount == 0)
+        #expect(verified.counterStalled)
+    }
+
+    @Test("or decline to decide, and read the signal off the result")
+    func theSignalCanBeSurfacedInsteadOfEnforced() throws {
+        let assertion = try Fixtures.assertion(
+            signCount: 3, storedSignCount: 8, storedIsBackedUp: false
+        )
+        let verified = try Self.verify(assertion, counterPolicy: .report)
+
+        // §7.2 says a relying party SHOULD apply its own risk policy. This is that, literally:
+        // the ceremony verified, the counter went backwards, and what to do about it is the
+        // consumer's call rather than this package's.
+        #expect(verified.counterStalled)
+        #expect(verified.newSignCount == 3)
+    }
+
+    @Test("a counter that is not stalled says so, under every policy")
+    func anAdvancingCounterIsNeverStalled() throws {
+        let assertion = try Fixtures.assertion(signCount: 9, storedSignCount: 8)
+        #expect(try !Self.verify(assertion).counterStalled)
+        #expect(try !Self.verify(assertion, counterPolicy: .report).counterStalled)
+    }
+
+    @Test("two zeroes are an authenticator with no counter, not a stall")
+    func twoZeroesAreNotAStall() throws {
+        let assertion = try Fixtures.assertion(signCount: 0, storedSignCount: 0)
+        // The Apple case. Both counters zero means the authenticator keeps none, so there is
+        // nothing to have stalled — and every policy must accept it.
+        #expect(try !Self.verify(assertion).counterStalled)
+        #expect(try !Self.verify(assertion, counterPolicy: .allowWhenBackedUp).counterStalled)
     }
 
     @Test("both counters zero, which is an authenticator that does not implement one")

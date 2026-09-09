@@ -25,11 +25,19 @@ Keychain passkey — and:
 | Backed up (BS) | set | set |
 | Signature counter | 0 | 0 |
 
-**The counter does not move.** That is the measurement `RelyingParty.checkCounter` was written
-against and, until this capture, had only read from the specification: regression is evidence of
-a cloned authenticator *only* for a credential that is not backed up. Had a static counter been
-treated as an attack, this credential — the ordinary case on Apple hardware — would have been
-refused at its first login.
+**The counter does not move**, and both counters are therefore zero at every step.
+
+**Be careful what this proves.** It proves the *both-zero* case: an authenticator that keeps no
+counter must not be treated as having stalled, or the ordinary Apple credential is refused at its
+first login. That is a real and load-bearing measurement.
+
+It does **not** prove the rule this package originally built on top of it — that a stalled
+counter is acceptable whenever a credential is backed up. These ceremonies never reach that
+branch, because both counters are zero and the both-zero carve-out fires first. The external bar
+(`project/external-bar/`) demonstrated exactly that by replaying these files through a second
+implementation, which accepts them too despite having no backup rule at all.
+
+The backup rule has since been withdrawn as a default. See ``SignatureCounterPolicy``.
 
 ## Regenerating
 
