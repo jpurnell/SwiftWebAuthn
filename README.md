@@ -13,7 +13,7 @@ no tests copied.
 
 What is being verified is a signature that decides who someone is. Reading the specification
 closely enough to implement it is how anyone earns the right to say the verification is correct,
-and a household adopting passkeys as its default is exactly where that matters.
+and a deployment adopting passkeys as its default is exactly where that matters.
 
 No cryptographic primitive is written here. `swift-crypto` does the mathematics; this parses,
 checks the specification's steps in order, and refuses everything it does not understand.

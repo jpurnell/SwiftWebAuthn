@@ -23,15 +23,24 @@ status:
   guidelinesPath: "."
   masterPlanPath: project/master_plan.md
 
+# The corpus stays named, and the path is relative rather than absolute.
+#
+# Relative because an absolute one encoded a home directory and a Dropbox layout true on exactly
+# one machine. Named at all because deleting the block would not fail the consistency checker —
+# it would make it skip, and a checker that skips is not a checker that passed. This is the only
+# reference to a sibling repository here, it is build tooling rather than product, and it
+# resolves to a checkout beside this one.
+#
+# If this package is ever made public, this block is what to revisit.
 consistency:
-  corpusPath: /Users/jpurnell/Dropbox/Computer/Development/Swift/Tools/org-judgement-corpus
+  corpusPath: ../org-judgement-corpus
   projectID: SwiftWebAuthn
   consistencyThreshold: 0.7
   defaultRiskTier: 2
 
 ijs:
   projectID: "SwiftWebAuthn"
-  corpusPath: "/Users/jpurnell/Dropbox/Computer/Development/Swift/Tools/org-judgement-corpus"
+  corpusPath: "../org-judgement-corpus"
   decisionOwner: "jpurnell"
   defaultRiskTier: 2
   remoteURL: "git@github.com:jpurnell/org-judgement-corpus.git"

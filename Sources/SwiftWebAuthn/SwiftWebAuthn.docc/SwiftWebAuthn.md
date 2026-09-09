@@ -20,7 +20,7 @@ is asked.
 
 The reason is that the thing being verified is a signature that decides who someone is. Reading the
 specification closely enough to implement it is how a reviewer earns the right to say the
-verification is correct — and a household adopting passkeys as its default is exactly the case
+verification is correct — and a deployment adopting passkeys as its default is exactly the case
 where that matters.
 
 ## Topics

@@ -16,9 +16,9 @@ key it already holds. Nothing else.
 
 ## 2. Motivation
 
-**Passkeys should be the default here, not an alternative.** This is an Apple household: every
-device has a platform authenticator, iCloud Keychain syncs credentials between them, and the
-prompt is a fingerprint rather than a password nobody remembers. `SwiftIdentity` §4c observed
+**Passkeys should be the default here, not an alternative.** The target deployment is
+Apple-only: every device carries a platform authenticator, iCloud Keychain syncs credentials
+between them, and the prompt is a fingerprint rather than a password nobody remembers. `SwiftIdentity` §4c observed
 that passkeys would retire the one credential kind that is guessable — which is an argument for
 building them early rather than eventually.
 
@@ -110,7 +110,7 @@ and hiding it inside a library would make it invisible.
 1. **The W3C Web Authentication specification**, §7.1 and §7.2, which enumerate the verification
    steps. Each numbered step becomes a named test, so a reader can check coverage against the
    document rather than against our judgement.
-2. **Real ceremonies from this household's own devices** — Touch ID on a Mac, Face ID on a
+2. **Real ceremonies from the deployment's own devices** — Touch ID on a Mac, Face ID on a
    phone — captured as fixtures. The most valuable vectors available, because they are what the
    deployment will actually see.
 3. **FIDO Alliance conformance vectors**, where published and usable.
@@ -132,8 +132,8 @@ verifies signatures, it does not implement primitives.
 Attestation answers "what kind of authenticator made this key". Verifying it fully means
 validating certificate chains against the FIDO Metadata Service and keeping that metadata fresh.
 
-**For a household, `none` is the right answer**, and Apple's platform authenticator uses
-anonymous attestation regardless. So v1 accepts `none` and self attestation, records the
+**Where nothing needs to distinguish authenticator makes, `none` is the right answer**, and
+Apple's platform authenticator uses anonymous attestation regardless. So v1 accepts `none` and self attestation, records the
 attestation format it saw, and **refuses formats it cannot verify rather than accepting them
 unchecked** — the failure mode being an attestation that is trusted because it was not
 understood.
@@ -152,8 +152,8 @@ to distinguish authenticator makes.
 **Strongest case for a different approach.** Depend on `brokenhandsio/swift-webauthn`. It is
 maintained, it is used, its bugs have been found by people who are not us, and cryptographic
 verification code is the canonical example of what not to write yourself. A reviewer would say
-that a household adopting passkeys is *more* reason to use the reviewed implementation, not
-less.
+that a small deployment adopting passkeys is *more* reason to use the reviewed implementation,
+not less.
 
 That is a serious argument and it is not fully answerable. What tips it: this package verifies
 rather than implements — no primitive is written here, `swift-crypto` does the mathematics — and
@@ -168,7 +168,7 @@ starts accepting shapes to make a real authenticator work, that is the signal to
 dependency instead.
 
 **What an experienced critic would say.** "You are hand-rolling authentication *and* a binary
-parser, in the same package, for a family of five." The honest reply is that the alternative was
+parser, in the same package, for a handful of users." The honest reply is that the alternative was
 considered, the bar for replacing this with the maintained package is written down in §6.4, and
 if the CBOR subset grows the decision gets revisited rather than defended.
 
