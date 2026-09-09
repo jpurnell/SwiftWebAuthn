@@ -90,4 +90,109 @@ enum Fixtures {
         }
         return bytes + trailing
     }
+
+    // MARK: - CBOR encoding, enough to build an attestation object
+
+    /// A text string header plus its bytes.
+    static func textString(_ text: String) -> [UInt8] {
+        let bytes = Array(text.utf8)
+        precondition(bytes.count < 24, "only the width these fixtures use")
+        return [0x60 | UInt8(bytes.count)] + bytes
+    }
+
+    /// A small negative integer, as COSE algorithm labels are.
+    static func negative(_ value: Int) -> [UInt8] {
+        precondition(value < 0 && value >= -24, "only the width these fixtures use")
+        return [0x20 | UInt8(-1 - value)]
+    }
+
+    /// A map of already-encoded key/value pairs.
+    static func map(_ pairs: [([UInt8], [UInt8])]) -> [UInt8] {
+        precondition(pairs.count < 24, "only the width these fixtures use")
+        return [0xA0 | UInt8(pairs.count)] + pairs.flatMap { $0.0 + $0.1 }
+    }
+
+    /// An attestation object: `{"fmt": …, "attStmt": …, "authData": …}`.
+    static func attestationObject(
+        format: String, statement: [UInt8], authenticatorData: [UInt8]
+    ) -> [UInt8] {
+        map([
+            (textString("fmt"), textString(format)),
+            (textString("attStmt"), statement),
+            (textString("authData"), byteString(authenticatorData)),
+        ])
+    }
+
+    // MARK: - A complete registration
+
+    /// Everything a relying party is handed at the end of a registration ceremony.
+    struct Registration {
+        let clientDataJSON: [UInt8]
+        let attestationObject: [UInt8]
+        let authenticatorData: [UInt8]
+        let credentialID: [UInt8]
+        let x963: [UInt8]
+        let challenge: [UInt8]
+    }
+
+    /// Builds a registration, signing it for real when `selfAttested` is set.
+    ///
+    /// The signature is produced by the same private key whose public half is registered, over
+    /// exactly `authenticatorData ‖ SHA256(clientDataJSON)` — so a test that passes has verified
+    /// arithmetic rather than a shape.
+    static func registration(
+        relyingPartyID: String = "example.com",
+        origin: String = "https://example.com",
+        challenge: [UInt8] = [UInt8](repeating: 0x5A, count: 32),
+        type: String = "webauthn.create",
+        flags: UInt8 = Flag.userPresent | Flag.userVerified | Flag.attestedCredentialData,
+        signCount: UInt32 = 0,
+        selfAttested: Bool = false,
+        format: String? = nil,
+        corruptSignature: Bool = false
+    ) throws -> Registration {
+        let key = es256COSEKey()
+        let credentialID = [UInt8](repeating: 0xC1, count: 32)
+
+        // The credential is present only when the flag says it is. An authenticator that set
+        // one without the other would be producing trailing bytes, and the parser refuses those
+        // — so a fixture that did it would be testing the wrong refusal.
+        let carriesCredential = flags & Flag.attestedCredentialData != 0
+        let authData = authenticatorData(
+            relyingPartyID: relyingPartyID, flags: flags, signCount: signCount,
+            aaguid: carriesCredential ? [UInt8](repeating: 0, count: 16) : nil,
+            credentialID: carriesCredential ? credentialID : nil,
+            publicKey: carriesCredential ? key.cbor : nil
+        )
+
+        let clientDataJSON = Array("""
+            {"type":"\(type)","challenge":"\(Base64URL.encode(challenge))","origin":"\(origin)","crossOrigin":false}
+            """.utf8)
+
+        let statement: [UInt8]
+        if selfAttested {
+            let hash = Array(SHA256.hash(data: Data(clientDataJSON)))
+            var signature = Array(try key.privateKey.signature(for: Data(authData + hash)).derRepresentation)
+            if corruptSignature { signature[signature.count - 1] ^= 0xFF }
+            statement = map([
+                (textString("alg"), negative(-7)),
+                (textString("sig"), byteString(signature)),
+            ])
+        } else {
+            statement = map([])
+        }
+
+        return Registration(
+            clientDataJSON: clientDataJSON,
+            attestationObject: attestationObject(
+                format: format ?? (selfAttested ? "packed" : "none"),
+                statement: statement,
+                authenticatorData: authData
+            ),
+            authenticatorData: authData,
+            credentialID: credentialID,
+            x963: key.x963,
+            challenge: challenge
+        )
+    }
 }
