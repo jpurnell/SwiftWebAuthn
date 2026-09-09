@@ -75,7 +75,17 @@ consequences: |
 
   Negative, and real: this is hand-written verification of attacker-supplied bytes. The risk is
   not eliminated by care, it is mitigated by the external bar — which only helps once it is
-  actually run. Until it is, this package has been checked by one party.
+  actually run.
+
+  The bar was run on 2026-09-09 against brokenhandsio/swift-webauthn at 2b6b4d4: sixteen
+  ceremonies, the same bytes to both verifiers, 14 agreements and 2 disagreements. One is a
+  laxity on their side (trailing bytes after the attestation object are ignored); the other is a
+  signature-counter policy where both behaviours are conformant, because §7.2 says a relying
+  party SHOULD apply its own risk policy rather than mandating refusal. Written up in
+  project/external-bar/README.md.
+
+  What that does NOT establish: that either implementation is correct. Two implementations can
+  share a misreading, and a differential test cannot see a step both of them skipped.
 
   An abandonment condition is recorded rather than left to judgement: if the CBOR subset starts
   growing to make real authenticators work, take the dependency instead. Written before any code

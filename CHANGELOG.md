@@ -89,11 +89,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **ADR-002** — passkeys reach `SwiftIdentity` through an adapter product rather than a
   dependency, so a consumer whose clients cannot run a ceremony links none of this.
 
-### Not yet done, and not claimed
+- **The external bar was run** (2026-09-09), discharging ADR-001's outstanding claim. Sixteen
+  ceremonies, the identical bytes handed to this implementation and to
+  `brokenhandsio/swift-webauthn`: **14 agreements, 2 disagreements**, both understood and written
+  up in `project/external-bar/`. One is a laxity on their side — trailing bytes after an
+  attestation object are ignored — and the other is a signature-counter policy where §7.2 leaves
+  the choice to the relying party.
 
-The authentication ceremony, the options types both ceremonies need, the `SwiftWebAuthnIdentity`
-adapter, fixtures captured from real devices, and the external bar. **Until that suite is run,
-this implementation has been checked by one party.**
+- Removed the scaffold's `public enum SwiftWebAuthn {}`, which shadowed the module name and made
+  `SwiftWebAuthn.RelyingParty` fail to resolve for any consumer that needed to disambiguate.
+  Found by the external bar, which had to import both packages and could not name ours.
+
+### Still not claimed
+
+Two implementations can share a misreading, and a differential test cannot see a step both of
+them skipped. Only the zero signature-counter path has met real hardware.
 
 - Package scaffolded from development-guidelines v2.3.0 — the first project to use the release
   that stopped the scaffolder writing four defects into every new repository.

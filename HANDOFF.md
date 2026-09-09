@@ -53,9 +53,14 @@ quality-gate --no-cache          # never trust a cached green
 
 ## The exact next step
 
-**Run the external bar** — `brokenhandsio/swift-webauthn`'s public suite against this
-implementation, deliberately, as ADR-001 says. It is the last outstanding claim in that decision
-and the only remaining weakness below.
+**Nothing is outstanding.** Both ceremonies, both option sets, the adapter, real-device fixtures
+and the external bar are all done, and ADR-001 has no unmet claims left.
+
+The two things worth doing when the opportunity arises, neither of them urgent:
+
+1. **Report the trailing-bytes laxity upstream** — see `project/external-bar/README.md`. They
+   accept bytes appended after an attestation object; we refuse them.
+2. **Capture an authenticator whose counter increments** (below).
 
 Real-device fixtures are **done** (2026-09-08, Apple platform authenticator, in
 `Tests/SwiftWebAuthnTests/CapturedCeremonies/`). One thing they do *not* cover, worth capturing
@@ -75,11 +80,12 @@ on disk has already been proved.
 
 ## Where this is weakest, in order
 
-1. **The external bar has not been run.** ADR-001 rests on it:
-   `brokenhandsio/swift-webauthn`'s public suite, run against this implementation once the API
-   is stable, deliberately and not as a test dependency. **Until it is run, this package has
-   been checked by one party** — which is exactly the risk the adversarial review named, and it
-   is now the only one still standing.
+1. ~~**The external bar has not been run.**~~ **Run 2026-09-09**: 14 agreements, 2 disagreements
+   against `brokenhandsio/swift-webauthn`, both understood — `project/external-bar/README.md`.
+
+   What replaces it, because the risk did not vanish: **two implementations can share a
+   misreading**, and a differential test cannot see a step both of them skipped. Fourteen
+   agreements is evidence, not proof.
 
 2. **Only the zero counter has met real hardware.** ~~The backup-flag rule is a reading, not a
    measurement.~~ **Settled 2026-09-08**: an Apple platform authenticator reports BE and BS set

@@ -1,0 +1,375 @@
+// The external bar from ADR-001: the same bytes, judged by both implementations.
+//
+// Not a port of their tests. Each case builds one ceremony and hands the identical bytes to
+// SwiftWebAuthn and to brokenhandsio/swift-webauthn, then compares accept against accept. A
+// disagreement is a finding in one of them, and which one is a question the specification
+// answers rather than a vote.
+//
+// The key material is theirs — the P-256 pair published in their test suite — so the vectors are
+// not ours either.
+
+import Crypto
+import Foundation
+import SwiftWebAuthn
+import WebAuthn
+
+// MARK: - Their published key
+
+let theirPrivateKeyPEM = """
+-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgUC6oOLmd9F3Ak32L
+WJCzQB1eF00UX5MCzYi47hNS+zqhRANCAASWIbQJIqS1L1E8G2Z5uNSPgQGZcsfz
+xk1shW3jTkWmRWY3MSr+CumivsCLz0YR4OkIHm8SAxGomGYF1dO0skj4
+-----END PRIVATE KEY-----
+"""
+
+let privateKey = try P256.Signing.PrivateKey(pemRepresentation: theirPrivateKeyPEM)
+let x963 = Array(privateKey.publicKey.x963Representation)
+let coordinateX = Array(x963[1..<33])
+let coordinateY = Array(x963[33..<65])
+
+let relyingPartyID = "example.com"
+let origin = "https://example.com"
+let credentialID = [UInt8](repeating: 0xC1, count: 32)
+
+// MARK: - Byte builders
+
+func base64url(_ bytes: [UInt8]) -> String {
+    Data(bytes).base64EncodedString()
+        .replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
+}
+
+func byteString(_ bytes: [UInt8]) -> [UInt8] {
+    if bytes.count < 24 { return [0x40 | UInt8(bytes.count)] + bytes }
+    if bytes.count <= 255 { return [0x58, UInt8(bytes.count)] + bytes }
+    return [0x59, UInt8(bytes.count >> 8), UInt8(bytes.count & 0xFF)] + bytes
+}
+
+func textString(_ text: String) -> [UInt8] {
+    let bytes = Array(text.utf8)
+    return [0x60 | UInt8(bytes.count)] + bytes
+}
+
+/// `{1: 2, 3: -7, -1: 1, -2: x, -3: y}`
+let coseKey: [UInt8] = [0xA5]
+    + [0x01, 0x02] + [0x03, 0x26] + [0x20, 0x01]
+    + [0x21] + byteString(coordinateX)
+    + [0x22] + byteString(coordinateY)
+
+struct Flags {
+    static let userPresent: UInt8 = 0x01
+    static let userVerified: UInt8 = 0x04
+    static let backupEligible: UInt8 = 0x08
+    static let backedUp: UInt8 = 0x10
+    static let attested: UInt8 = 0x40
+}
+
+func authenticatorData(
+    rpID: String = relyingPartyID,
+    flags: UInt8,
+    counter: UInt32 = 0,
+    attested: Bool,
+    credentialIDLengthOverride: UInt16? = nil
+) -> [UInt8] {
+    var bytes = Array(SHA256.hash(data: Data(rpID.utf8)))
+    bytes.append(flags)
+    bytes += [
+        UInt8((counter >> 24) & 0xFF), UInt8((counter >> 16) & 0xFF),
+        UInt8((counter >> 8) & 0xFF), UInt8(counter & 0xFF),
+    ]
+    if attested {
+        bytes += [UInt8](repeating: 0, count: 16)
+        let declared = credentialIDLengthOverride ?? UInt16(credentialID.count)
+        bytes += [UInt8(declared >> 8), UInt8(declared & 0xFF)]
+        bytes += credentialID
+        bytes += coseKey
+    }
+    return bytes
+}
+
+func clientData(type: String, challenge: [UInt8], origin: String = origin) -> [UInt8] {
+    Array("""
+        {"type":"\(type)","challenge":"\(base64url(challenge))","origin":"\(origin)","crossOrigin":false}
+        """.utf8)
+}
+
+func attestationObject(format: String = "none", statement: [UInt8] = [0xA0], authData: [UInt8]) -> [UInt8] {
+    [0xA3]
+        + textString("fmt") + textString(format)
+        + textString("attStmt") + statement
+        + textString("authData") + byteString(authData)
+}
+
+// MARK: - Running both
+
+enum Verdict: Equatable {
+    case accepted
+    case rejected(String)
+
+    var label: String {
+        switch self {
+        case .accepted: "accept"
+        case .rejected: "reject"
+        }
+    }
+}
+
+let ours = SwiftWebAuthn.RelyingParty(
+    id: relyingPartyID, name: "External bar", origins: [origin]
+)
+let theirs = WebAuthnManager(configuration: .init(
+    relyingPartyID: relyingPartyID,
+    relyingPartyName: "External bar",
+    relyingPartyOrigin: origin
+))
+
+func ourRegistration(clientDataJSON: [UInt8], attestation: [UInt8], challenge: [UInt8], requireUV: Bool) -> Verdict {
+    do {
+        _ = try ours.verifyRegistration(
+            SwiftWebAuthn.RegistrationResponse(
+                clientDataJSON: clientDataJSON, attestationObject: attestation
+            ),
+            expecting: SwiftWebAuthn.Challenge(challenge),
+            requiringUserVerification: requireUV
+        )
+        return .accepted
+    } catch {
+        return .rejected("\(error)")
+    }
+}
+
+func theirRegistration(clientDataJSON: [UInt8], attestation: [UInt8], challenge: [UInt8], requireUV: Bool) async -> Verdict {
+    let json = """
+        {"id":"\(base64url(credentialID))","type":"public-key","rawId":"\(base64url(credentialID))",
+         "response":{"clientDataJSON":"\(base64url(clientDataJSON))",
+                     "attestationObject":"\(base64url(attestation))"}}
+        """
+    do {
+        let credential = try JSONDecoder().decode(RegistrationCredential.self, from: Data(json.utf8))
+        _ = try await theirs.finishRegistration(
+            challenge: challenge,
+            credentialCreationData: credential,
+            requireUserVerification: requireUV,
+            confirmCredentialIDNotRegisteredYet: { _ in true }
+        )
+        return .accepted
+    } catch {
+        return .rejected("\(error)")
+    }
+}
+
+func ourAuthentication(
+    clientDataJSON: [UInt8], authData: [UInt8], signature: [UInt8],
+    challenge: [UInt8], storedCounter: UInt32, storedBackedUp: Bool, requireUV: Bool
+) -> Verdict {
+    do {
+        let stored = SwiftWebAuthn.RegisteredCredential(
+            id: credentialID,
+            publicKey: try SwiftWebAuthn.COSEPublicKey(coseKey),
+            signCount: storedCounter,
+            isBackupEligible: storedBackedUp,
+            isBackedUp: storedBackedUp,
+            aaguid: [UInt8](repeating: 0, count: 16),
+            attestationFormat: "none"
+        )
+        _ = try ours.verifyAuthentication(
+            SwiftWebAuthn.AuthenticationResponse(
+                credentialID: credentialID, clientDataJSON: clientDataJSON,
+                authenticatorData: authData, signature: signature, userHandle: nil
+            ),
+            expecting: SwiftWebAuthn.Challenge(challenge),
+            against: stored,
+            requiringUserVerification: requireUV
+        )
+        return .accepted
+    } catch {
+        return .rejected("\(error)")
+    }
+}
+
+func theirAuthentication(
+    clientDataJSON: [UInt8], authData: [UInt8], signature: [UInt8],
+    challenge: [UInt8], storedCounter: UInt32, requireUV: Bool
+) -> Verdict {
+    let json = """
+        {"id":"\(base64url(credentialID))","type":"public-key","rawId":"\(base64url(credentialID))",
+         "response":{"clientDataJSON":"\(base64url(clientDataJSON))",
+                     "authenticatorData":"\(base64url(authData))",
+                     "signature":"\(base64url(signature))"}}
+        """
+    do {
+        let credential = try JSONDecoder().decode(AuthenticationCredential.self, from: Data(json.utf8))
+        _ = try theirs.finishAuthentication(
+            credential: credential,
+            expectedChallenge: challenge,
+            credentialPublicKey: coseKey,
+            credentialCurrentSignCount: storedCounter,
+            requireUserVerification: requireUV
+        )
+        return .accepted
+    } catch {
+        return .rejected("\(error)")
+    }
+}
+
+// MARK: - The cases
+
+var agreements = 0
+var disagreements: [(String, Verdict, Verdict)] = []
+
+@MainActor func compare(_ name: String, _ mine: Verdict, _ theirs: Verdict) {
+    let same = mine.label == theirs.label
+    if same {
+        agreements += 1
+        print("  ✓ \(name.padding(toLength: 52, withPad: " ", startingAt: 0)) both \(mine.label)")
+    } else {
+        disagreements.append((name, mine, theirs))
+        print("  ✗ \(name.padding(toLength: 52, withPad: " ", startingAt: 0)) ours \(mine.label), theirs \(theirs.label)")
+    }
+}
+
+let challenge = [UInt8](repeating: 0x5A, count: 32)
+
+print("\nREGISTRATION\n")
+
+let validAuthData = authenticatorData(
+    flags: Flags.userPresent | Flags.userVerified | Flags.attested, attested: true
+)
+let validClient = clientData(type: "webauthn.create", challenge: challenge)
+let validAttestation = attestationObject(authData: validAuthData)
+
+compare("a valid none-attestation ceremony",
+        ourRegistration(clientDataJSON: validClient, attestation: validAttestation, challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: validClient, attestation: validAttestation, challenge: challenge, requireUV: true))
+
+compare("a challenge nobody issued",
+        ourRegistration(clientDataJSON: validClient, attestation: validAttestation, challenge: [UInt8](repeating: 0x11, count: 32), requireUV: true),
+        await theirRegistration(clientDataJSON: validClient, attestation: validAttestation, challenge: [UInt8](repeating: 0x11, count: 32), requireUV: true))
+
+let foreignOrigin = clientData(type: "webauthn.create", challenge: challenge, origin: "https://example.com.evil.test")
+compare("a look-alike origin",
+        ourRegistration(clientDataJSON: foreignOrigin, attestation: validAttestation, challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: foreignOrigin, attestation: validAttestation, challenge: challenge, requireUV: true))
+
+let foreignParty = attestationObject(authData: authenticatorData(
+    rpID: "other.example", flags: Flags.userPresent | Flags.userVerified | Flags.attested, attested: true
+))
+compare("another relying party's hash",
+        ourRegistration(clientDataJSON: validClient, attestation: foreignParty, challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: validClient, attestation: foreignParty, challenge: challenge, requireUV: true))
+
+let wrongType = clientData(type: "webauthn.get", challenge: challenge)
+compare("the authentication ceremony's client data",
+        ourRegistration(clientDataJSON: wrongType, attestation: validAttestation, challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: wrongType, attestation: validAttestation, challenge: challenge, requireUV: true))
+
+let noPresence = attestationObject(authData: authenticatorData(flags: Flags.attested, attested: true))
+compare("nobody present",
+        ourRegistration(clientDataJSON: validClient, attestation: noPresence, challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: validClient, attestation: noPresence, challenge: challenge, requireUV: true))
+
+let noVerification = attestationObject(authData: authenticatorData(
+    flags: Flags.userPresent | Flags.attested, attested: true
+))
+compare("present but unverified, verification required",
+        ourRegistration(clientDataJSON: validClient, attestation: noVerification, challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: validClient, attestation: noVerification, challenge: challenge, requireUV: true))
+
+compare("trailing bytes after the attestation object",
+        ourRegistration(clientDataJSON: validClient, attestation: validAttestation + [0x00], challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: validClient, attestation: validAttestation + [0x00], challenge: challenge, requireUV: true))
+
+// A credential-id length field claiming more than the data holds.
+let overlong = attestationObject(authData: authenticatorData(
+    flags: Flags.userPresent | Flags.userVerified | Flags.attested, attested: true,
+    credentialIDLengthOverride: 4096
+))
+compare("a credential-id length beyond the data",
+        ourRegistration(clientDataJSON: validClient, attestation: overlong, challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: validClient, attestation: overlong, challenge: challenge, requireUV: true))
+
+// `fmt` present twice — whichever wins is arbitrary.
+let duplicateKey: [UInt8] = [0xA4]
+    + textString("fmt") + textString("none")
+    + textString("fmt") + textString("packed")
+    + textString("attStmt") + [0xA0]
+    + textString("authData") + byteString(validAuthData)
+compare("a duplicate CBOR map key",
+        ourRegistration(clientDataJSON: validClient, attestation: duplicateKey, challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: validClient, attestation: duplicateKey, challenge: challenge, requireUV: true))
+
+// An attestation format neither of us verifies, carrying a statement.
+let unknownFormat = attestationObject(format: "tpm", statement: [0xA0], authData: validAuthData)
+compare("an attestation format that cannot be checked",
+        ourRegistration(clientDataJSON: validClient, attestation: unknownFormat, challenge: challenge, requireUV: true),
+        await theirRegistration(clientDataJSON: validClient, attestation: unknownFormat, challenge: challenge, requireUV: true))
+
+print("\nAUTHENTICATION\n")
+
+let authChallenge = [UInt8](repeating: 0x7B, count: 32)
+let assertionAuthData = authenticatorData(
+    flags: Flags.userPresent | Flags.userVerified, counter: 5, attested: false
+)
+let assertionClient = clientData(type: "webauthn.get", challenge: authChallenge)
+let assertionHash = Array(SHA256.hash(data: Data(assertionClient)))
+let goodSignature = Array(try privateKey.signature(for: Data(assertionAuthData + assertionHash)).derRepresentation)
+
+compare("a valid assertion",
+        ourAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: goodSignature,
+                          challenge: authChallenge, storedCounter: 4, storedBackedUp: false, requireUV: true),
+        theirAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: goodSignature,
+                            challenge: authChallenge, storedCounter: 4, requireUV: true))
+
+var tampered = goodSignature
+tampered[tampered.count - 1] ^= 0xFF
+compare("a signature over different bytes",
+        ourAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: tampered,
+                          challenge: authChallenge, storedCounter: 4, storedBackedUp: false, requireUV: true),
+        theirAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: tampered,
+                            challenge: authChallenge, storedCounter: 4, requireUV: true))
+
+let otherKey = P256.Signing.PrivateKey()
+let foreignSignature = Array(try otherKey.signature(for: Data(assertionAuthData + assertionHash)).derRepresentation)
+compare("a signature by a key nobody registered",
+        ourAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: foreignSignature,
+                          challenge: authChallenge, storedCounter: 4, storedBackedUp: false, requireUV: true),
+        theirAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: foreignSignature,
+                            challenge: authChallenge, storedCounter: 4, requireUV: true))
+
+// Counter regression on a credential that is NOT backed up: a cloned authenticator.
+let regressedData = authenticatorData(flags: Flags.userPresent | Flags.userVerified, counter: 3, attested: false)
+let regressedHash = Array(SHA256.hash(data: Data(assertionClient)))
+let regressedSignature = Array(try privateKey.signature(for: Data(regressedData + regressedHash)).derRepresentation)
+compare("a counter that went backwards, not backed up",
+        ourAuthentication(clientDataJSON: assertionClient, authData: regressedData, signature: regressedSignature,
+                          challenge: authChallenge, storedCounter: 8, storedBackedUp: false, requireUV: true),
+        theirAuthentication(clientDataJSON: assertionClient, authData: regressedData, signature: regressedSignature,
+                            challenge: authChallenge, storedCounter: 8, requireUV: true))
+
+// The §10.3 case: a synced passkey whose counter never moves.
+let syncedData = authenticatorData(
+    flags: Flags.userPresent | Flags.userVerified | Flags.backupEligible | Flags.backedUp,
+    counter: 0, attested: false
+)
+let syncedSignature = Array(try privateKey.signature(for: Data(syncedData + Array(SHA256.hash(data: Data(assertionClient))))).derRepresentation)
+compare("a backed-up credential with a static counter",
+        ourAuthentication(clientDataJSON: assertionClient, authData: syncedData, signature: syncedSignature,
+                          challenge: authChallenge, storedCounter: 8, storedBackedUp: true, requireUV: true),
+        theirAuthentication(clientDataJSON: assertionClient, authData: syncedData, signature: syncedSignature,
+                            challenge: authChallenge, storedCounter: 8, requireUV: true))
+
+print("""
+
+    \(agreements) agreements, \(disagreements.count) disagreements
+    """)
+
+for (name, mine, other) in disagreements {
+    print("""
+
+        DISAGREEMENT — \(name)
+          ours:   \(mine)
+          theirs: \(other)
+        """)
+}

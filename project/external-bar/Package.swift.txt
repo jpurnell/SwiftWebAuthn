@@ -1,0 +1,20 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "external-bar",
+    platforms: [.macOS(.v14)],
+    dependencies: [
+        .package(path: "../../../../../../../Users/jpurnell/Dropbox/Computer/Development/Swift/Tools/SwiftWebAuthn"),
+        .package(path: "../swift-webauthn"),
+    ],
+    targets: [
+        .executableTarget(
+            name: "external-bar",
+            dependencies: [
+                .product(name: "SwiftWebAuthn", package: "SwiftWebAuthn"),
+                .product(name: "WebAuthn", package: "swift-webauthn"),
+            ]
+        ),
+    ]
+)
