@@ -19,7 +19,7 @@ public struct COSEPublicKey: Sendable, Equatable, Codable {
     ///
     /// The raw values are the COSE algorithm identifiers, so the wire format and this enum
     /// cannot drift apart.
-    public enum Algorithm: Int, Sendable, Equatable, Codable {
+    public enum Algorithm: Int, Sendable, Equatable, Codable, CaseIterable {
         /// ECDSA over P-256 with SHA-256.
         case es256 = -7
         /// EdDSA over Ed25519.

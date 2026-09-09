@@ -104,6 +104,65 @@ public struct RelyingParty: Sendable {
         self.origins = origins
     }
 
+    /// How long a browser should wait for a ceremony, in milliseconds.
+    ///
+    /// Sixty seconds. Long enough to find a phone, short enough that an abandoned prompt does
+    /// not keep a challenge alive indefinitely.
+    public static let defaultTimeout = 60_000
+
+    /// Builds the options for a registration ceremony.
+    ///
+    /// - Parameters:
+    ///   - user: The person the credential is for.
+    ///   - challenge: The challenge to be signed. **Remember it**; verification compares against
+    ///     it and cannot know whether it has been used before.
+    ///   - excluding: Credential identifiers this person already has, so an authenticator that
+    ///     already holds one declines rather than silently enrolling a second.
+    ///   - userVerification: How thoroughly the person must be identified. `required` by
+    ///     default, matching ``verifyRegistration(_:expecting:requiringUserVerification:)``.
+    /// - Returns: The options, encodable to the JSON form the browser expects.
+    public func registrationOptions(
+        for user: UserEntity,
+        challenge: Challenge,
+        excluding: [[UInt8]] = [],
+        userVerification: UserVerificationRequirement = .required
+    ) -> PublicKeyCredentialCreationOptions {
+        PublicKeyCredentialCreationOptions(
+            relyingParty: (id: id, name: name),
+            user: user,
+            challenge: challenge.bytes,
+            // Derived from what the verifier accepts rather than listed again here. Offering an
+            // algorithm this package refuses produces a ceremony that fails *after* the person
+            // has touched the sensor; offering fewer narrows what can enrol, silently.
+            algorithms: COSEPublicKey.Algorithm.allCases,
+            excludeCredentials: excluding.map(CredentialDescriptor.init),
+            userVerification: userVerification,
+            timeout: Self.defaultTimeout
+        )
+    }
+
+    /// Builds the options for an authentication ceremony.
+    ///
+    /// - Parameters:
+    ///   - challenge: The challenge to be signed.
+    ///   - allowing: The credentials permitted to answer. Empty invites any discoverable
+    ///     credential, which is what a login page with no username field wants.
+    ///   - userVerification: How thoroughly the person must be identified.
+    /// - Returns: The options, encodable to the JSON form the browser expects.
+    public func authenticationOptions(
+        challenge: Challenge,
+        allowing: [[UInt8]],
+        userVerification: UserVerificationRequirement = .required
+    ) -> PublicKeyCredentialRequestOptions {
+        PublicKeyCredentialRequestOptions(
+            challenge: challenge.bytes,
+            relyingPartyID: id,
+            allowCredentials: allowing.map(CredentialDescriptor.init),
+            userVerification: userVerification,
+            timeout: Self.defaultTimeout
+        )
+    }
+
     /// Verifies a registration ceremony and returns the credential to store.
     ///
     /// - Parameters:
