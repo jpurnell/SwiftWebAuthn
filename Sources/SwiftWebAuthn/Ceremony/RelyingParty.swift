@@ -42,6 +42,74 @@ public struct RegisteredCredential: Sendable, Equatable, Codable {
     /// Kept so a deployment can find out later what its authenticators actually sent, which is
     /// the evidence any future decision about attestation would need.
     public let attestationFormat: String
+
+    /// Rebuilds a stored credential.
+    ///
+    /// Public because a consumer persists this at registration and has to reconstruct it at
+    /// every authentication afterwards — the type would be unusable if only this package could
+    /// make one.
+    public init(
+        id: [UInt8],
+        publicKey: COSEPublicKey,
+        signCount: UInt32,
+        isBackupEligible: Bool,
+        isBackedUp: Bool,
+        aaguid: [UInt8],
+        attestationFormat: String
+    ) {
+        self.id = id
+        self.publicKey = publicKey
+        self.signCount = signCount
+        self.isBackupEligible = isBackupEligible
+        self.isBackedUp = isBackedUp
+        self.aaguid = aaguid
+        self.attestationFormat = attestationFormat
+    }
+}
+
+/// What a browser hands back at the end of an authentication ceremony.
+public struct AuthenticationResponse: Sendable {
+    /// Which credential answered.
+    public let credentialID: [UInt8]
+    /// The client data, exactly as the browser produced it.
+    public let clientDataJSON: [UInt8]
+    /// The authenticator data that was signed.
+    public let authenticatorData: [UInt8]
+    /// The signature over that data and the client data hash.
+    public let signature: [UInt8]
+    /// The user handle, present when the credential is discoverable.
+    public let userHandle: [UInt8]?
+
+    /// Wraps a ceremony's parts.
+    public init(
+        credentialID: [UInt8],
+        clientDataJSON: [UInt8],
+        authenticatorData: [UInt8],
+        signature: [UInt8],
+        userHandle: [UInt8]?
+    ) {
+        self.credentialID = credentialID
+        self.clientDataJSON = clientDataJSON
+        self.authenticatorData = authenticatorData
+        self.signature = signature
+        self.userHandle = userHandle
+    }
+}
+
+/// The outcome of a verified authentication, and the state the consumer must write back.
+public struct VerifiedAuthentication: Sendable, Equatable {
+    /// The credential that answered.
+    public let credentialID: [UInt8]
+    /// The counter to store. **Persist this**, or the next verification compares against a stale
+    /// value and the regression check stops meaning anything.
+    public let newSignCount: UInt32
+    /// Whether the person was identified rather than merely present.
+    public let userVerified: Bool
+    /// Whether the credential is now backed up.
+    ///
+    /// Returned because it **changes after registration** — a credential enrolled on one device
+    /// becomes backed up the moment it syncs. Persist it: the counter rule reads it.
+    public let isBackedUp: Bool
 }
 
 /// The server side of WebAuthn: one relying party, and the ceremonies it will verify.
@@ -82,6 +150,15 @@ public struct RelyingParty: Sendable {
         /// Refused rather than accepted unchecked — the failure mode being an attestation that
         /// is trusted because it was not understood.
         case unsupportedAttestationFormat(String)
+        /// The assertion answered with a credential other than the one being checked.
+        case credentialMismatch
+        /// The assertion signature did not verify, or could not be read.
+        case assertionSignatureInvalid
+        /// The signature counter did not advance on a credential that should increment it.
+        ///
+        /// Evidence of a cloned authenticator — but only for a credential that is **not** backed
+        /// up. See ``verifyAuthentication(_:expecting:against:requiringUserVerification:)``.
+        case signatureCounterRegressed(stored: UInt32, received: UInt32)
     }
 
     /// The relying party identifier — a domain the ceremony is scoped to.
@@ -221,6 +298,101 @@ public struct RelyingParty: Sendable {
             aaguid: credential.aaguid,
             attestationFormat: attestation.format
         )
+    }
+
+    /// Verifies an authentication ceremony.
+    ///
+    /// - Parameters:
+    ///   - response: What the browser returned.
+    ///   - challenge: The challenge that was issued. **Single use is the caller's to enforce.**
+    ///   - credential: The stored credential this assertion claims to be from.
+    ///   - requiringUserVerification: Whether the person must have been identified rather than
+    ///     merely present. Defaults to `true`.
+    /// - Returns: The outcome, carrying the counter and backup state to persist.
+    /// - Throws: ``RelyingParty/Failure``, or the parsing failure underneath it.
+    public func verifyAuthentication(
+        _ response: AuthenticationResponse,
+        expecting challenge: Challenge,
+        against credential: RegisteredCredential,
+        requiringUserVerification: Bool = true
+    ) throws -> VerifiedAuthentication {
+        // Checked first: everything below verifies against `credential`, and doing that work for
+        // an assertion from a different credential would be answering a question nobody asked.
+        guard response.credentialID == credential.id else { throw Failure.credentialMismatch }
+
+        let clientData = try CollectedClientData(response.clientDataJSON)
+
+        guard clientData.type == "webauthn.get" else {
+            throw Failure.wrongCeremonyType(expected: "webauthn.get", actual: clientData.type)
+        }
+        guard clientData.challenge == challenge.bytes else { throw Failure.challengeMismatch }
+        guard origins.contains(clientData.origin) else {
+            throw Failure.untrustedOrigin(clientData.origin)
+        }
+
+        let authenticatorData = try AuthenticatorData(response.authenticatorData)
+
+        guard authenticatorData.relyingPartyIDHash == Array(SHA256.hash(data: Data(id.utf8))) else {
+            throw Failure.relyingPartyMismatch
+        }
+        guard authenticatorData.flags.userPresent else { throw Failure.userNotPresent }
+        guard !requiringUserVerification || authenticatorData.flags.userVerified else {
+            throw Failure.userNotVerified
+        }
+
+        // The signature covers the authenticator data as it arrived, concatenated with the hash
+        // of the client data as it arrived. Both are the raw bytes for that reason.
+        do {
+            try verify(
+                signature: response.signature,
+                over: response.authenticatorData
+                    + Array(SHA256.hash(data: Data(response.clientDataJSON))),
+                with: credential.publicKey
+            )
+        } catch {
+            // Re-labelled: the shared helper reports an attestation failure, and this is an
+            // assertion. The distinction matters to whoever reads the log.
+            throw Failure.assertionSignatureInvalid
+        }
+
+        try checkCounter(
+            received: authenticatorData.signCount,
+            against: credential,
+            isBackedUp: authenticatorData.flags.isBackedUp
+        )
+
+        return VerifiedAuthentication(
+            credentialID: credential.id,
+            newSignCount: authenticatorData.signCount,
+            userVerified: authenticatorData.flags.userVerified,
+            isBackedUp: authenticatorData.flags.isBackedUp
+        )
+    }
+
+    /// The signature-counter rule, which is §10.3 and is the softest thing in this package.
+    ///
+    /// A counter that fails to advance is the specification's evidence of a cloned
+    /// authenticator. It is only evidence for a credential that **increments one at all**, and
+    /// two cases do not:
+    ///
+    /// - An authenticator that never implements a counter reports zero forever.
+    /// - **A passkey synced through a keychain may never increment it**, because the counter is
+    ///   per-device state and the credential is not.
+    ///
+    /// So regression is an error only when the credential is not backed up. Refusing otherwise
+    /// would lock out every synced passkey, which is the common case rather than the attack.
+    ///
+    /// - Important: This rule is read from the specification and has **not** been checked
+    ///   against a real device. It is the first thing to verify once real-device fixtures exist.
+    private func checkCounter(
+        received: UInt32, against credential: RegisteredCredential, isBackedUp: Bool
+    ) throws {
+        // Zero on both sides is an authenticator that does not keep one. There is nothing to
+        // compare, and treating it as regression would refuse every such device.
+        if received == 0 && credential.signCount == 0 { return }
+        if received > credential.signCount { return }
+        if isBackedUp || credential.isBackedUp { return }
+        throw Failure.signatureCounterRegressed(stored: credential.signCount, received: received)
     }
 
     /// Checks the attestation statement, as far as this package will believe one.

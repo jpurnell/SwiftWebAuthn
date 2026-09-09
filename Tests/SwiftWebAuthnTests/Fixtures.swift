@@ -195,4 +195,66 @@ enum Fixtures {
             challenge: challenge
         )
     }
+
+    // MARK: - A complete authentication
+
+    /// Everything a relying party is handed at the end of an authentication ceremony, plus the
+    /// stored credential it is checked against.
+    struct Assertion {
+        let credentialID: [UInt8]
+        let clientDataJSON: [UInt8]
+        let authenticatorData: [UInt8]
+        let signature: [UInt8]
+        let credential: RegisteredCredential
+        let challenge: [UInt8]
+    }
+
+    /// Builds an assertion, signed for real by the key the stored credential holds.
+    ///
+    /// `signWithAnotherKey` produces a structurally perfect assertion signed by a key nobody
+    /// registered — the case a shape-only check would wave through.
+    static func assertion(
+        relyingPartyID: String = "example.com",
+        origin: String = "https://example.com",
+        challenge: [UInt8] = [UInt8](repeating: 0x7B, count: 32),
+        type: String = "webauthn.get",
+        flags: UInt8 = Flag.userPresent | Flag.userVerified,
+        signCount: UInt32 = 5,
+        storedSignCount: UInt32 = 4,
+        storedIsBackedUp: Bool = false,
+        corruptSignature: Bool = false,
+        signWithAnotherKey: Bool = false
+    ) throws -> Assertion {
+        let key = es256COSEKey()
+        let credentialID = [UInt8](repeating: 0xC1, count: 32)
+
+        let authData = authenticatorData(
+            relyingPartyID: relyingPartyID, flags: flags, signCount: signCount
+        )
+        let clientDataJSON = Array("""
+            {"type":"\(type)","challenge":"\(Base64URL.encode(challenge))","origin":"\(origin)","crossOrigin":false}
+            """.utf8)
+
+        let hash = Array(SHA256.hash(data: Data(clientDataJSON)))
+        let signer = signWithAnotherKey ? P256.Signing.PrivateKey() : key.privateKey
+        var signature = Array(try signer.signature(for: Data(authData + hash)).derRepresentation)
+        if corruptSignature { signature[signature.count - 1] ^= 0xFF }
+
+        return Assertion(
+            credentialID: credentialID,
+            clientDataJSON: clientDataJSON,
+            authenticatorData: authData,
+            signature: signature,
+            credential: RegisteredCredential(
+                id: credentialID,
+                publicKey: try COSEPublicKey(key.cbor),
+                signCount: storedSignCount,
+                isBackupEligible: storedIsBackedUp,
+                isBackedUp: storedIsBackedUp,
+                aaguid: [UInt8](repeating: 0, count: 16),
+                attestationFormat: "none"
+            ),
+            challenge: challenge
+        )
+    }
 }
