@@ -29,6 +29,17 @@ public enum UserVerificationRequirement: String, Sendable, Codable {
     case discouraged
 }
 
+/// Which kind of authenticator a ceremony will accept.
+///
+/// Left unset, any will do — and that is the right default, because a relying party that does
+/// not care must not accidentally exclude a security key or someone's phone.
+public enum AuthenticatorAttachment: String, Sendable, Codable {
+    /// Built into the device running the browser: Touch ID, Face ID, Windows Hello.
+    case platform
+    /// Something detachable — a security key, or another device over the hybrid transport.
+    case crossPlatform = "cross-platform"
+}
+
 /// One credential named to the browser, to allow or to exclude.
 public struct CredentialDescriptor: Sendable, Equatable, Encodable {
     /// The credential identifier.
@@ -63,6 +74,8 @@ public struct PublicKeyCredentialCreationOptions: Sendable, Equatable, Encodable
     public let excludeCredentials: [CredentialDescriptor]
     /// How thoroughly the person must be identified.
     public let userVerification: UserVerificationRequirement
+    /// Which kind of authenticator will be accepted, or nil for any.
+    public let attachment: AuthenticatorAttachment?
     /// How long the browser should wait, in milliseconds.
     public let timeout: Int
 
@@ -73,7 +86,8 @@ public struct PublicKeyCredentialCreationOptions: Sendable, Equatable, Encodable
         lhs.relyingParty == rhs.relyingParty && lhs.user == rhs.user
             && lhs.challenge == rhs.challenge && lhs.algorithms == rhs.algorithms
             && lhs.excludeCredentials == rhs.excludeCredentials
-            && lhs.userVerification == rhs.userVerification && lhs.timeout == rhs.timeout
+            && lhs.userVerification == rhs.userVerification && lhs.attachment == rhs.attachment
+            && lhs.timeout == rhs.timeout
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -83,7 +97,9 @@ public struct PublicKeyCredentialCreationOptions: Sendable, Equatable, Encodable
     private enum PartyKeys: String, CodingKey { case id, name }
     private enum UserKeys: String, CodingKey { case id, name, displayName }
     private enum ParameterKeys: String, CodingKey { case alg, type }
-    private enum SelectionKeys: String, CodingKey { case userVerification, residentKey }
+    private enum SelectionKeys: String, CodingKey {
+        case userVerification, residentKey, authenticatorAttachment
+    }
 
     /// Encodes to the WebAuthn JSON form.
     public func encode(to encoder: any Encoder) throws {
@@ -114,6 +130,9 @@ public struct PublicKeyCredentialCreationOptions: Sendable, Equatable, Encodable
         )
         try selection.encode(userVerification, forKey: .userVerification)
         try selection.encode("preferred", forKey: .residentKey)
+        // Omitted entirely when unset. Encoding null would be a different statement from saying
+        // nothing, and some browsers treat the key's presence as a constraint.
+        try selection.encodeIfPresent(attachment, forKey: .authenticatorAttachment)
 
         // Not requested, because none of it would be verified. Asking for attestation this
         // package refuses would be theatre, and would prompt some authenticators to show the

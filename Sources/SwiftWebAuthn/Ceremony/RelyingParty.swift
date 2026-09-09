@@ -197,12 +197,16 @@ public struct RelyingParty: Sendable {
     ///     already holds one declines rather than silently enrolling a second.
     ///   - userVerification: How thoroughly the person must be identified. `required` by
     ///     default, matching ``verifyRegistration(_:expecting:requiringUserVerification:)``.
+    ///   - attachment: Which kind of authenticator to accept. Unset by default, so a security
+    ///     key or a phone is as welcome as the built-in sensor; pass ``AuthenticatorAttachment/platform``
+    ///     to insist on the device in front of the person.
     /// - Returns: The options, encodable to the JSON form the browser expects.
     public func registrationOptions(
         for user: UserEntity,
         challenge: Challenge,
         excluding: [[UInt8]] = [],
-        userVerification: UserVerificationRequirement = .required
+        userVerification: UserVerificationRequirement = .required,
+        attachment: AuthenticatorAttachment? = nil
     ) -> PublicKeyCredentialCreationOptions {
         PublicKeyCredentialCreationOptions(
             relyingParty: (id: id, name: name),
@@ -214,6 +218,7 @@ public struct RelyingParty: Sendable {
             algorithms: COSEPublicKey.Algorithm.allCases,
             excludeCredentials: excluding.map(CredentialDescriptor.init),
             userVerification: userVerification,
+            attachment: attachment,
             timeout: Self.defaultTimeout
         )
     }

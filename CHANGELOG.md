@@ -70,6 +70,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
   These are the only tests here whose inputs this package did not produce.
 
+- **`webauthn-capture`** — a development tool for capturing ceremonies from real authenticators,
+  as an executable target with **no product**, so nothing can depend on it. It generates its
+  options through `RelyingParty` and verifies each ceremony before writing it, so a fixture that
+  does not verify is caught at capture time rather than committed as evidence.
+
+- **`AuthenticatorAttachment`**, so a relying party can insist on the built-in sensor rather than
+  being offered a phone. Unset by default, because a party that does not care must not
+  accidentally exclude a security key. Found by using the options for real: the capture tool
+  needed it and the library had no way to say it.
+
 ### Decided
 
 - **Proposal approved 2026-09-08**, with all four open questions answered in §10.

@@ -94,6 +94,33 @@ struct OptionsTests {
         #expect(selection["userVerification"] as? String == "required")
     }
 
+    @Test("an attachment can be demanded, and is absent unless it is")
+    func attachmentIsOptionalAndHonoured() throws {
+        let user = UserEntity(id: [1], name: "ada", displayName: "Ada")
+
+        // Unconstrained by default: a relying party that does not care must not accidentally
+        // exclude a security key or a phone.
+        let open = try Self.encoded(
+            Self.party.registrationOptions(for: user, challenge: Challenge([0xAA]))
+        )
+        let unconstrained = try #require(open["authenticatorSelection"] as? [String: Any])
+        #expect(unconstrained["authenticatorAttachment"] == nil)
+
+        // And demanded when it is, which is what steers a browser to Touch ID rather than
+        // offering to hand the ceremony to another device.
+        let platform = try Self.encoded(Self.party.registrationOptions(
+            for: user, challenge: Challenge([0xAA]), attachment: .platform
+        ))
+        let constrained = try #require(platform["authenticatorSelection"] as? [String: Any])
+        #expect(constrained["authenticatorAttachment"] as? String == "platform")
+
+        let roaming = try Self.encoded(Self.party.registrationOptions(
+            for: user, challenge: Challenge([0xAA]), attachment: .crossPlatform
+        ))
+        let cross = try #require(roaming["authenticatorSelection"] as? [String: Any])
+        #expect(cross["authenticatorAttachment"] as? String == "cross-platform")
+    }
+
     // MARK: - The two halves must agree
 
     @Test("the algorithms offered are exactly the algorithms this package verifies")

@@ -44,6 +44,16 @@ let package = Package(
                 .enableUpcomingFeature("ApproachableConcurrency"),
             ]
         ),
+        // A development tool, deliberately **not** vended as a product: nobody can depend on
+        // it. It mints challenges and writes files, which is exactly what a library must never
+        // do on a consumer's behalf. `swift run webauthn-capture` inside this repo.
+        .executableTarget(
+            name: "webauthn-capture",
+            dependencies: ["SwiftWebAuthn"],
+            swiftSettings: [
+                .enableUpcomingFeature("ApproachableConcurrency"),
+            ]
+        ),
         .target(
             name: "SwiftWebAuthnIdentity",
             dependencies: [
