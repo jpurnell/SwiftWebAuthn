@@ -58,10 +58,11 @@ and the external bar are all done, and ADR-001 has no unmet claims left.
 
 The two things worth doing when the opportunity arises, neither of them urgent:
 
-1. **Report the CBOR laxity upstream** — see `project/external-bar/README.md`. Six payloads that
-   CTAP2 canonical encoding form forbids are accepted by `brokenhandsio/swift-webauthn`; the
-   sharpest is a complete second CBOR item riding along inside an attestation object, which is
-   the parser-differential class.
+1. ~~**Report the CBOR laxity upstream.**~~ Reconsidered once two more oracles were added: on
+   trailing bytes we are **0 of 3**, so this is our unusual position rather than their defect.
+   The strictness stays — no interop cost, and it refuses bytes nothing examines — but do not
+   file it as a bug. On non-canonical lengths and indefinite-length maps the field splits 2-2,
+   which is a more defensible place to be unusual.
 2. **Capture an authenticator whose counter increments** (below).
 
 Real-device fixtures are **done** (2026-09-08, Apple platform authenticator, in
@@ -82,12 +83,15 @@ on disk has already been proved.
 
 ## Where this is weakest, in order
 
-1. ~~**The external bar has not been run.**~~ **Run 2026-09-09**: 14 agreements, 2 disagreements
-   against `brokenhandsio/swift-webauthn`, both understood — `project/external-bar/README.md`.
+1. ~~**The external bar has not been run.**~~ **Run 2026-09-09 against three implementations in
+   three languages**: 24 of 29 unanimous, every split understood —
+   `project/external-bar/README.md`. It corrected this package twice: once on the signature
+   counter (we were wrong) and once on how loudly to call trailing bytes a defect (we were merely
+   alone).
 
-   What replaces it, because the risk did not vanish: **two implementations can share a
-   misreading**, and a differential test cannot see a step both of them skipped. Fourteen
-   agreements is evidence, not proof.
+   What replaces it, because the risk did not vanish: **all four read the same specification**,
+   and a differential test cannot see a step every implementation skipped. Twenty-four unanimous
+   verdicts is evidence, not proof.
 
 2. **Only the zero counter has met real hardware, and that is narrower than it sounds.** The
    capture proves the *both-zero* carve-out: an authenticator that keeps no counter must not be

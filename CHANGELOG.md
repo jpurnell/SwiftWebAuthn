@@ -92,9 +92,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **The external bar was run** (2026-09-09), discharging ADR-001's outstanding claim: 34
   ceremonies, the identical bytes handed to this implementation and to
   `brokenhandsio/swift-webauthn`. **28 agreements, 6 disagreements**, every one understood and
-  written up in `project/external-bar/`. All six remaining are their CBOR decoder accepting what
-  CTAP2 canonical encoding form forbids — trailing bytes, appended items, non-canonical lengths,
-  indefinite-length maps.
+  written up in `project/external-bar/`. Two further oracles were then added —
+  `@simplewebauthn/server` 14.0.1 and `py_webauthn` 3.0.0 — judging the identical corpus:
+  **24 of 29 cases unanimous across four implementations in three languages**, including every
+  security-critical case and all ten signature-counter cases.
+
+  The five splits are all CBOR strictness. On **trailing bytes we are alone, 0 of 3** — the
+  strictness stays, because it costs no interop and refuses bytes nothing examines, but the
+  earlier claim that this was a defect in the other implementation is withdrawn. On non-canonical
+  lengths and indefinite-length maps the field splits evenly, with SimpleWebAuthn strict too.
 
 ### Changed
 

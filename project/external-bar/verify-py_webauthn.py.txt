@@ -1,0 +1,62 @@
+"""Fourth oracle: py_webauthn (Duo), judging the same corpus."""
+import base64, json, sys
+from webauthn import verify_registration_response, verify_authentication_response
+from webauthn.helpers import (
+    parse_registration_credential_json,
+    parse_authentication_credential_json,
+)
+
+def b64u(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+corpus = json.load(open(sys.argv[1]))
+verdicts = {}
+
+for case in corpus:
+    try:
+        if case["ceremony"] == "registration":
+            payload = json.dumps({
+                "id": case["credentialID"],
+                "rawId": case["credentialID"],
+                "type": "public-key",
+                "clientExtensionResults": {},
+                "response": {
+                    "clientDataJSON": case["clientDataJSON"],
+                    "attestationObject": case["attestationObject"],
+                },
+            })
+            verify_registration_response(
+                credential=parse_registration_credential_json(payload),
+                expected_challenge=b64u(case["challenge"]),
+                expected_origin=case["origin"],
+                expected_rp_id=case["relyingPartyID"],
+                require_user_verification=case["requireUserVerification"],
+            )
+        else:
+            payload = json.dumps({
+                "id": case["credentialID"],
+                "rawId": case["credentialID"],
+                "type": "public-key",
+                "clientExtensionResults": {},
+                "response": {
+                    "clientDataJSON": case["clientDataJSON"],
+                    "authenticatorData": case["authenticatorData"],
+                    "signature": case["signature"],
+                },
+            })
+            verify_authentication_response(
+                credential=parse_authentication_credential_json(payload),
+                expected_challenge=b64u(case["challenge"]),
+                expected_origin=case["origin"],
+                expected_rp_id=case["relyingPartyID"],
+                credential_public_key=b64u(case["coseKey"]),
+                credential_current_sign_count=case["storedCounter"],
+                require_user_verification=case["requireUserVerification"],
+            )
+        verdicts[case["name"]] = "accept"
+    except Exception:
+        verdicts[case["name"]] = "reject"
+
+json.dump(verdicts, open("verdicts-py_webauthn.json", "w"), indent=2)
+accepts = sum(1 for v in verdicts.values() if v == "accept")
+print(f"py_webauthn judged {len(corpus)} cases — accepts: {accepts}, rejects: {len(corpus) - accepts}")

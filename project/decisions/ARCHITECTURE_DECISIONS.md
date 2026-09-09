@@ -89,9 +89,18 @@ consequences: |
   not Apple-shaped. The rule became SignatureCounterPolicy, defaulting to refusal, and the ten
   counter cases now agree ten out of ten.
 
-  Six disagreements remain, all one thing: their CBOR decoder accepts trailing bytes, appended
-  items, non-canonical lengths and indefinite-length maps, none of which CTAP2 canonical encoding
-  form permits. Written up in project/external-bar/README.md.
+  Two further implementations were then added as oracles — @simplewebauthn/server 14.0.1
+  (TypeScript) and py_webauthn 3.0.0 (Python) — judging the identical corpus. 24 of 29 cases are
+  unanimous across all four, including every security-critical one and all ten counter cases.
+
+  The five splits are all CBOR strictness. On trailing bytes we are alone, 0 of 3, and the
+  earlier claim that this was "theirs to fix" is withdrawn: being stricter than the field is not
+  the same as the field being wrong. The strictness stays because it costs no interop and refuses
+  attacker-controlled bytes nothing examines, but it is our unusual position rather than their
+  defect. On non-canonical lengths and indefinite-length maps the field splits 2-2, with
+  SimpleWebAuthn strict alongside us.
+
+  Written up in project/external-bar/README.md, which carries the matrix.
 
   What that does NOT establish: that either implementation is correct. Two implementations can
   share a misreading, and a differential test cannot see a step both of them skipped.

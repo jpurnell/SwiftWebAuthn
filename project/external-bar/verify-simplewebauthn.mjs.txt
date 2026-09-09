@@ -1,0 +1,64 @@
+// Third oracle: SimpleWebAuthn (TypeScript), judging the same corpus.
+import { readFileSync, writeFileSync } from 'node:fs';
+import { verifyRegistrationResponse, verifyAuthenticationResponse } from '@simplewebauthn/server';
+
+const corpus = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const b64 = (s) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+
+const verdicts = {};
+
+for (const c of corpus) {
+  let verdict;
+  let result;
+  try {
+    if (c.ceremony === 'registration') {
+      result = await verifyRegistrationResponse({
+        response: {
+          id: c.credentialID,
+          rawId: c.credentialID,
+          type: 'public-key',
+          clientExtensionResults: {},
+          response: {
+            clientDataJSON: c.clientDataJSON,
+            attestationObject: c.attestationObject,
+          },
+        },
+        expectedChallenge: c.challenge,
+        expectedOrigin: c.origin,
+        expectedRPID: c.relyingPartyID,
+        requireUserVerification: c.requireUserVerification,
+      });
+    } else {
+      result = await verifyAuthenticationResponse({
+        response: {
+          id: c.credentialID,
+          rawId: c.credentialID,
+          type: 'public-key',
+          clientExtensionResults: {},
+          response: {
+            clientDataJSON: c.clientDataJSON,
+            authenticatorData: c.authenticatorData,
+            signature: c.signature,
+          },
+        },
+        expectedChallenge: c.challenge,
+        expectedOrigin: c.origin,
+        expectedRPID: c.relyingPartyID,
+        credential: {
+          id: c.credentialID,
+          publicKey: new Uint8Array(b64(c.coseKey)),
+          counter: c.storedCounter,
+        },
+        requireUserVerification: c.requireUserVerification,
+      });
+    }
+    // It throws for most failures but reports others as `verified: false`; both are a refusal.
+    verdict = result.verified ? 'accept' : 'reject';
+  } catch (error) {
+    verdict = 'reject';
+  }
+  verdicts[c.name] = verdict;
+}
+
+writeFileSync('verdicts-simplewebauthn.json', JSON.stringify(verdicts, null, 2));
+console.log(`SimpleWebAuthn judged ${corpus.length} cases`);

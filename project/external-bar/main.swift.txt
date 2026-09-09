@@ -219,6 +219,51 @@ func theirAuthentication(
 var agreements = 0
 var disagreements: [(String, Verdict, Verdict)] = []
 
+/// One case, in a form any language can read.
+struct CorpusCase: Encodable {
+    let name: String
+    let ceremony: String
+    let relyingPartyID: String
+    let origin: String
+    let challenge: String
+    let requireUserVerification: Bool
+    let credentialID: String
+    var clientDataJSON: String
+    var attestationObject: String?
+    var authenticatorData: String?
+    var signature: String?
+    var coseKey: String?
+    var storedCounter: UInt32?
+    var storedBackedUp: Bool?
+    var ours: String
+    var theirs: String
+}
+
+var corpus: [CorpusCase] = []
+
+/// Records a case for the other implementations, alongside the two verdicts reached here.
+@MainActor func record(
+    _ name: String, ceremony: String, mine: Verdict, other: Verdict,
+    clientDataJSON: [UInt8], challenge: [UInt8], requireUV: Bool,
+    rpID: String = relyingPartyID, origin originValue: String = origin,
+    credential: [UInt8] = credentialID,
+    attestation: [UInt8]? = nil, authData: [UInt8]? = nil, signature: [UInt8]? = nil,
+    cose: [UInt8]? = nil, storedCounter: UInt32? = nil, storedBackedUp: Bool? = nil
+) {
+    corpus.append(CorpusCase(
+        name: name, ceremony: ceremony, relyingPartyID: rpID, origin: originValue,
+        challenge: base64url(challenge), requireUserVerification: requireUV,
+        credentialID: base64url(credential),
+        clientDataJSON: base64url(clientDataJSON),
+        attestationObject: attestation.map(base64url),
+        authenticatorData: authData.map(base64url),
+        signature: signature.map(base64url),
+        coseKey: cose.map(base64url),
+        storedCounter: storedCounter, storedBackedUp: storedBackedUp,
+        ours: mine.label, theirs: other.label
+    ))
+}
+
 @MainActor func compare(_ name: String, _ mine: Verdict, _ theirs: Verdict) {
     let same = mine.label == theirs.label
     if same {
@@ -230,356 +275,161 @@ var disagreements: [(String, Verdict, Verdict)] = []
     }
 }
 
-let challenge = [UInt8](repeating: 0x5A, count: 32)
 
-print("\nREGISTRATION\n")
+// MARK: - The corpus
+
+let challenge = [UInt8](repeating: 0x5A, count: 32)
+let authChallenge = [UInt8](repeating: 0x7B, count: 32)
 
 let validAuthData = authenticatorData(
     flags: Flags.userPresent | Flags.userVerified | Flags.attested, attested: true
 )
 let validClient = clientData(type: "webauthn.create", challenge: challenge)
 let validAttestation = attestationObject(authData: validAuthData)
-
-compare("a valid none-attestation ceremony",
-        ourRegistration(clientDataJSON: validClient, attestation: validAttestation, challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: validClient, attestation: validAttestation, challenge: challenge, requireUV: true))
-
-compare("a challenge nobody issued",
-        ourRegistration(clientDataJSON: validClient, attestation: validAttestation, challenge: [UInt8](repeating: 0x11, count: 32), requireUV: true),
-        await theirRegistration(clientDataJSON: validClient, attestation: validAttestation, challenge: [UInt8](repeating: 0x11, count: 32), requireUV: true))
-
-let foreignOrigin = clientData(type: "webauthn.create", challenge: challenge, origin: "https://example.com.evil.test")
-compare("a look-alike origin",
-        ourRegistration(clientDataJSON: foreignOrigin, attestation: validAttestation, challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: foreignOrigin, attestation: validAttestation, challenge: challenge, requireUV: true))
-
-let foreignParty = attestationObject(authData: authenticatorData(
-    rpID: "other.example", flags: Flags.userPresent | Flags.userVerified | Flags.attested, attested: true
-))
-compare("another relying party's hash",
-        ourRegistration(clientDataJSON: validClient, attestation: foreignParty, challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: validClient, attestation: foreignParty, challenge: challenge, requireUV: true))
-
-let wrongType = clientData(type: "webauthn.get", challenge: challenge)
-compare("the authentication ceremony's client data",
-        ourRegistration(clientDataJSON: wrongType, attestation: validAttestation, challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: wrongType, attestation: validAttestation, challenge: challenge, requireUV: true))
-
-let noPresence = attestationObject(authData: authenticatorData(flags: Flags.attested, attested: true))
-compare("nobody present",
-        ourRegistration(clientDataJSON: validClient, attestation: noPresence, challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: validClient, attestation: noPresence, challenge: challenge, requireUV: true))
-
-let noVerification = attestationObject(authData: authenticatorData(
-    flags: Flags.userPresent | Flags.attested, attested: true
-))
-compare("present but unverified, verification required",
-        ourRegistration(clientDataJSON: validClient, attestation: noVerification, challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: validClient, attestation: noVerification, challenge: challenge, requireUV: true))
-
-compare("trailing bytes after the attestation object",
-        ourRegistration(clientDataJSON: validClient, attestation: validAttestation + [0x00], challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: validClient, attestation: validAttestation + [0x00], challenge: challenge, requireUV: true))
-
-// A credential-id length field claiming more than the data holds.
-let overlong = attestationObject(authData: authenticatorData(
-    flags: Flags.userPresent | Flags.userVerified | Flags.attested, attested: true,
-    credentialIDLengthOverride: 4096
-))
-compare("a credential-id length beyond the data",
-        ourRegistration(clientDataJSON: validClient, attestation: overlong, challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: validClient, attestation: overlong, challenge: challenge, requireUV: true))
-
-// `fmt` present twice — whichever wins is arbitrary.
-let duplicateKey: [UInt8] = [0xA4]
-    + textString("fmt") + textString("none")
-    + textString("fmt") + textString("packed")
-    + textString("attStmt") + [0xA0]
-    + textString("authData") + byteString(validAuthData)
-compare("a duplicate CBOR map key",
-        ourRegistration(clientDataJSON: validClient, attestation: duplicateKey, challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: validClient, attestation: duplicateKey, challenge: challenge, requireUV: true))
-
-// An attestation format neither of us verifies, carrying a statement.
-let unknownFormat = attestationObject(format: "tpm", statement: [0xA0], authData: validAuthData)
-compare("an attestation format that cannot be checked",
-        ourRegistration(clientDataJSON: validClient, attestation: unknownFormat, challenge: challenge, requireUV: true),
-        await theirRegistration(clientDataJSON: validClient, attestation: unknownFormat, challenge: challenge, requireUV: true))
-
-print("\nAUTHENTICATION\n")
-
-let authChallenge = [UInt8](repeating: 0x7B, count: 32)
-let assertionAuthData = authenticatorData(
-    flags: Flags.userPresent | Flags.userVerified, counter: 5, attested: false
-)
 let assertionClient = clientData(type: "webauthn.get", challenge: authChallenge)
-let assertionHash = Array(SHA256.hash(data: Data(assertionClient)))
-let goodSignature = Array(try privateKey.signature(for: Data(assertionAuthData + assertionHash)).derRepresentation)
 
-compare("a valid assertion",
-        ourAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: goodSignature,
-                          challenge: authChallenge, storedCounter: 4, storedBackedUp: false, requireUV: true),
-        theirAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: goodSignature,
-                            challenge: authChallenge, storedCounter: 4, requireUV: true))
-
-var tampered = goodSignature
-tampered[tampered.count - 1] ^= 0xFF
-compare("a signature over different bytes",
-        ourAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: tampered,
-                          challenge: authChallenge, storedCounter: 4, storedBackedUp: false, requireUV: true),
-        theirAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: tampered,
-                            challenge: authChallenge, storedCounter: 4, requireUV: true))
-
-let otherKey = P256.Signing.PrivateKey()
-let foreignSignature = Array(try otherKey.signature(for: Data(assertionAuthData + assertionHash)).derRepresentation)
-compare("a signature by a key nobody registered",
-        ourAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: foreignSignature,
-                          challenge: authChallenge, storedCounter: 4, storedBackedUp: false, requireUV: true),
-        theirAuthentication(clientDataJSON: assertionClient, authData: assertionAuthData, signature: foreignSignature,
-                            challenge: authChallenge, storedCounter: 4, requireUV: true))
-
-// Counter regression on a credential that is NOT backed up: a cloned authenticator.
-let regressedData = authenticatorData(flags: Flags.userPresent | Flags.userVerified, counter: 3, attested: false)
-let regressedHash = Array(SHA256.hash(data: Data(assertionClient)))
-let regressedSignature = Array(try privateKey.signature(for: Data(regressedData + regressedHash)).derRepresentation)
-compare("a counter that went backwards, not backed up",
-        ourAuthentication(clientDataJSON: assertionClient, authData: regressedData, signature: regressedSignature,
-                          challenge: authChallenge, storedCounter: 8, storedBackedUp: false, requireUV: true),
-        theirAuthentication(clientDataJSON: assertionClient, authData: regressedData, signature: regressedSignature,
-                            challenge: authChallenge, storedCounter: 8, requireUV: true))
-
-// The §10.3 case: a synced passkey whose counter never moves.
-let syncedData = authenticatorData(
-    flags: Flags.userPresent | Flags.userVerified | Flags.backupEligible | Flags.backedUp,
-    counter: 0, attested: false
-)
-let syncedSignature = Array(try privateKey.signature(for: Data(syncedData + Array(SHA256.hash(data: Data(assertionClient))))).derRepresentation)
-compare("a backed-up credential with a static counter",
-        ourAuthentication(clientDataJSON: assertionClient, authData: syncedData, signature: syncedSignature,
-                          challenge: authChallenge, storedCounter: 8, storedBackedUp: true, requireUV: true),
-        theirAuthentication(clientDataJSON: assertionClient, authData: syncedData, signature: syncedSignature,
-                            challenge: authChallenge, storedCounter: 8, requireUV: true))
-
-print("""
-
-    \(agreements) agreements, \(disagreements.count) disagreements
-    """)
-
-for (name, mine, other) in disagreements {
-    print("""
-
-        DISAGREEMENT — \(name)
-          ours:   \(mine)
-          theirs: \(other)
-        """)
+/// Runs one registration payload through both, and records it for the others.
+@MainActor func checkRegistration(
+    _ name: String,
+    clientDataJSON: [UInt8] = validClient,
+    attestation: [UInt8],
+    expecting expected: [UInt8] = challenge,
+    requireUV: Bool = true
+) async {
+    let mine = ourRegistration(clientDataJSON: clientDataJSON, attestation: attestation,
+                               challenge: expected, requireUV: requireUV)
+    let other = await theirRegistration(clientDataJSON: clientDataJSON, attestation: attestation,
+                                        challenge: expected, requireUV: requireUV)
+    compare(name, mine, other)
+    record(name, ceremony: "registration", mine: mine, other: other,
+           clientDataJSON: clientDataJSON, challenge: expected, requireUV: requireUV,
+           attestation: attestation)
 }
 
-enum CaptureFailure: Error { case noCredential }
-
-// MARK: - Does the Apple capture actually discriminate the two counter policies?
-
-print("\nTHE REAL CEREMONY, THROUGH BOTH\n")
-
-struct CapturedFile: Decodable {
-    let credentialID: String
-    let clientDataJSON: String
-    let attestationObject: String?
-    let authenticatorData: String?
-    let signature: String?
-    let challenge: String
-    let origin: String
-    let relyingPartyID: String
-}
-
-func fromBase64URL(_ text: String) -> [UInt8] {
-    var padded = text.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-    padded += String(repeating: "=", count: (4 - padded.count % 4) % 4)
-    return Array(Data(base64Encoded: padded) ?? Data())
-}
-
-let capturedDirectory = "/Users/jpurnell/Dropbox/Computer/Development/Swift/Tools/SwiftWebAuthn/Tests/SwiftWebAuthnTests/CapturedCeremonies"
-
-let capturedRegistration = try JSONDecoder().decode(
-    CapturedFile.self,
-    from: try Data(contentsOf: URL(fileURLWithPath: "\(capturedDirectory)/captured-registration.json"))
-)
-let capturedAssertion = try JSONDecoder().decode(
-    CapturedFile.self,
-    from: try Data(contentsOf: URL(fileURLWithPath: "\(capturedDirectory)/captured-authentication.json"))
-)
-
-let appleRPID = capturedRegistration.relyingPartyID
-let appleOrigin = capturedRegistration.origin
-let appleCredentialID = fromBase64URL(capturedRegistration.credentialID)
-
-let appleOurs = SwiftWebAuthn.RelyingParty(id: appleRPID, name: "capture", origins: [appleOrigin])
-let appleTheirs = WebAuthnManager(configuration: .init(
-    relyingPartyID: appleRPID, relyingPartyName: "capture", relyingPartyOrigin: appleOrigin
-))
-
-// Registration, both sides.
-var ourAppleCredential: SwiftWebAuthn.RegisteredCredential?
-var ourRegistrationVerdict: Verdict
-do {
-    let credential = try appleOurs.verifyRegistration(
-        SwiftWebAuthn.RegistrationResponse(
-            clientDataJSON: fromBase64URL(capturedRegistration.clientDataJSON),
-            attestationObject: fromBase64URL(capturedRegistration.attestationObject ?? "")
-        ),
-        expecting: SwiftWebAuthn.Challenge(fromBase64URL(capturedRegistration.challenge))
-    )
-    ourAppleCredential = credential
-    print("    ours   — registered. backed up: \(credential.isBackedUp), counter: \(credential.signCount)")
-    ourRegistrationVerdict = .accepted
-} catch {
-    ourRegistrationVerdict = .rejected("\(error)")
-}
-
-var theirApplePublicKey: [UInt8] = []
-var theirRegistrationVerdict: Verdict
-do {
-    let json = """
-        {"id":"\(capturedRegistration.credentialID)","type":"public-key","rawId":"\(capturedRegistration.credentialID)",
-         "response":{"clientDataJSON":"\(capturedRegistration.clientDataJSON)",
-                     "attestationObject":"\(capturedRegistration.attestationObject ?? "")"}}
-        """
-    let credential = try JSONDecoder().decode(RegistrationCredential.self, from: Data(json.utf8))
-    let result = try await appleTheirs.finishRegistration(
-        challenge: fromBase64URL(capturedRegistration.challenge),
-        credentialCreationData: credential,
-        requireUserVerification: true,
-        confirmCredentialIDNotRegisteredYet: { _ in true }
-    )
-    theirApplePublicKey = result.publicKey
-    print("    theirs — registered. backed up: \(result.isBackedUp), counter: \(result.signCount)")
-    theirRegistrationVerdict = .accepted
-} catch {
-    theirRegistrationVerdict = .rejected("\(error)")
-}
-
-compare("the captured Apple registration", ourRegistrationVerdict, theirRegistrationVerdict)
-
-// Authentication, both sides, with the stored counter the registration produced (zero).
-let appleAssertionData = fromBase64URL(capturedAssertion.authenticatorData ?? "")
-let appleAssertionClient = fromBase64URL(capturedAssertion.clientDataJSON)
-let appleAssertionSignature = fromBase64URL(capturedAssertion.signature ?? "")
-let appleChallenge = fromBase64URL(capturedAssertion.challenge)
-
-var ourAssertionVerdict: Verdict
-do {
-    guard let stored = ourAppleCredential else { throw CaptureFailure.noCredential }
-    _ = try appleOurs.verifyAuthentication(
-        SwiftWebAuthn.AuthenticationResponse(
-            credentialID: appleCredentialID, clientDataJSON: appleAssertionClient,
-            authenticatorData: appleAssertionData, signature: appleAssertionSignature, userHandle: nil
-        ),
-        expecting: SwiftWebAuthn.Challenge(appleChallenge),
-        against: stored, requiringUserVerification: true
-    )
-    ourAssertionVerdict = .accepted
-} catch {
-    ourAssertionVerdict = .rejected("\(error)")
-}
-
-var theirAssertionVerdict: Verdict
-do {
-    let json = """
-        {"id":"\(capturedAssertion.credentialID)","type":"public-key","rawId":"\(capturedAssertion.credentialID)",
-         "response":{"clientDataJSON":"\(capturedAssertion.clientDataJSON)",
-                     "authenticatorData":"\(capturedAssertion.authenticatorData ?? "")",
-                     "signature":"\(capturedAssertion.signature ?? "")"}}
-        """
-    let credential = try JSONDecoder().decode(AuthenticationCredential.self, from: Data(json.utf8))
-    _ = try appleTheirs.finishAuthentication(
-        credential: credential,
-        expectedChallenge: appleChallenge,
-        credentialPublicKey: theirApplePublicKey,
-        credentialCurrentSignCount: 0,
-        requireUserVerification: true
-    )
-    theirAssertionVerdict = .accepted
-} catch {
-    theirAssertionVerdict = .rejected("\(error)")
-}
-
-compare("the captured Apple assertion", ourAssertionVerdict, theirAssertionVerdict)
-
-print("""
-
-    \(agreements) agreements, \(disagreements.count) disagreements (running total)
-    """)
-
-// MARK: - How lax is their CBOR, exactly?
-
-print("\nCBOR MALLEABILITY — the shape of disagreement 1\n")
-
-@MainActor func registrationCase(_ name: String, attestation: [UInt8]) async {
-    compare(name,
-            ourRegistration(clientDataJSON: validClient, attestation: attestation, challenge: challenge, requireUV: true),
-            await theirRegistration(clientDataJSON: validClient, attestation: attestation, challenge: challenge, requireUV: true))
-}
-
-await registrationCase("one trailing zero byte", attestation: validAttestation + [0x00])
-await registrationCase("a second complete CBOR item appended",
-                       attestation: validAttestation + [0xA1, 0x61, 0x78, 0x01])
-await registrationCase("1024 bytes of padding appended",
-                       attestation: validAttestation + [UInt8](repeating: 0xFF, count: 1024))
-
-// A fourth, unknown key in the attestation object map.
-let extraKey: [UInt8] = [0xA4]
-    + textString("fmt") + textString("none")
-    + textString("attStmt") + [0xA0]
-    + textString("authData") + byteString(validAuthData)
-    + textString("extra") + textString("ignored")
-await registrationCase("an unknown fourth key inside the map", attestation: extraKey)
-
-// `fmt` as a non-canonical text string: length 4 encoded in a following byte rather than inline.
-let nonCanonicalLength: [UInt8] = [0xA3]
-    + textString("fmt") + [0x78, 0x04] + Array("none".utf8)
-    + textString("attStmt") + [0xA0]
-    + textString("authData") + byteString(validAuthData)
-await registrationCase("a non-canonical string length", attestation: nonCanonicalLength)
-
-// An indefinite-length map, terminated by a break.
-var indefinite: [UInt8] = [0xBF]
-indefinite += textString("fmt") + textString("none")
-indefinite += textString("attStmt") + [0xA0]
-indefinite += textString("authData") + byteString(validAuthData)
-indefinite += [0xFF]
-await registrationCase("an indefinite-length map", attestation: indefinite)
-
-// MARK: - Where exactly do the counter policies diverge?
-
-print("\nCOUNTER POLICY — the shape of disagreement 2\n")
-
-@MainActor func counterCase(
-    _ name: String, reported: UInt32, stored: UInt32, backedUp: Bool
+/// Runs one assertion through both, signing it with the published key, and records it.
+@MainActor func checkAuthentication(
+    _ name: String, reported: UInt32, stored: UInt32, backedUp: Bool,
+    corrupt: Bool = false, foreignKey: Bool = false
 ) throws {
     var flags = Flags.userPresent | Flags.userVerified
     if backedUp { flags |= Flags.backupEligible | Flags.backedUp }
     let data = authenticatorData(flags: flags, counter: reported, attested: false)
     let hash = Array(SHA256.hash(data: Data(assertionClient)))
-    let signature = Array(try privateKey.signature(for: Data(data + hash)).derRepresentation)
+    let signer = foreignKey ? P256.Signing.PrivateKey() : privateKey
+    var signature = Array(try signer.signature(for: Data(data + hash)).derRepresentation)
+    if corrupt { signature[signature.count - 1] ^= 0xFF }
 
-    compare(name,
-            ourAuthentication(clientDataJSON: assertionClient, authData: data, signature: signature,
-                              challenge: authChallenge, storedCounter: stored, storedBackedUp: backedUp, requireUV: true),
-            theirAuthentication(clientDataJSON: assertionClient, authData: data, signature: signature,
-                                challenge: authChallenge, storedCounter: stored, requireUV: true))
+    let mine = ourAuthentication(clientDataJSON: assertionClient, authData: data, signature: signature,
+                                 challenge: authChallenge, storedCounter: stored,
+                                 storedBackedUp: backedUp, requireUV: true)
+    let other = theirAuthentication(clientDataJSON: assertionClient, authData: data, signature: signature,
+                                    challenge: authChallenge, storedCounter: stored, requireUV: true)
+    compare(name, mine, other)
+    record(name, ceremony: "authentication", mine: mine, other: other,
+           clientDataJSON: assertionClient, challenge: authChallenge, requireUV: true,
+           authData: data, signature: signature, cose: coseKey,
+           storedCounter: stored, storedBackedUp: backedUp)
 }
 
-try counterCase("0 → 0, not backed up  (counter unsupported)", reported: 0, stored: 0, backedUp: false)
-try counterCase("0 → 0, backed up      (the Apple case)",      reported: 0, stored: 0, backedUp: true)
-try counterCase("8 → 9, not backed up  (normal advance)",      reported: 9, stored: 8, backedUp: false)
-try counterCase("8 → 9, backed up",                            reported: 9, stored: 8, backedUp: true)
-try counterCase("8 → 8, not backed up  (stalled)",             reported: 8, stored: 8, backedUp: false)
-try counterCase("8 → 8, backed up      (** diverges **)",      reported: 8, stored: 8, backedUp: true)
-try counterCase("8 → 3, not backed up  (regressed)",           reported: 3, stored: 8, backedUp: false)
-try counterCase("8 → 3, backed up      (** diverges **)",      reported: 3, stored: 8, backedUp: true)
-try counterCase("8 → 0, backed up      (** diverges **)",      reported: 0, stored: 8, backedUp: true)
-try counterCase("0 → 5, not backed up  (first advance)",       reported: 5, stored: 0, backedUp: false)
+print("\nREGISTRATION\n")
+
+await checkRegistration("a valid none-attestation ceremony", attestation: validAttestation)
+await checkRegistration("a challenge nobody issued", attestation: validAttestation,
+                        expecting: [UInt8](repeating: 0x11, count: 32))
+await checkRegistration("a look-alike origin",
+                        clientDataJSON: clientData(type: "webauthn.create", challenge: challenge,
+                                                   origin: "https://example.com.evil.test"),
+                        attestation: validAttestation)
+await checkRegistration("another relying party's hash",
+                        attestation: attestationObject(authData: authenticatorData(
+                            rpID: "other.example",
+                            flags: Flags.userPresent | Flags.userVerified | Flags.attested,
+                            attested: true)))
+await checkRegistration("the authentication ceremony's client data",
+                        clientDataJSON: clientData(type: "webauthn.get", challenge: challenge),
+                        attestation: validAttestation)
+await checkRegistration("nobody present",
+                        attestation: attestationObject(authData: authenticatorData(
+                            flags: Flags.attested, attested: true)))
+await checkRegistration("present but unverified, verification required",
+                        attestation: attestationObject(authData: authenticatorData(
+                            flags: Flags.userPresent | Flags.attested, attested: true)))
+await checkRegistration("a credential-id length beyond the data",
+                        attestation: attestationObject(authData: authenticatorData(
+                            flags: Flags.userPresent | Flags.userVerified | Flags.attested,
+                            attested: true, credentialIDLengthOverride: 4096)))
+await checkRegistration("an attestation format that cannot be checked",
+                        attestation: attestationObject(format: "tpm", statement: [0xA0],
+                                                       authData: validAuthData))
+
+let duplicateKey: [UInt8] = [0xA4]
+    + textString("fmt") + textString("none")
+    + textString("fmt") + textString("packed")
+    + textString("attStmt") + [0xA0]
+    + textString("authData") + byteString(validAuthData)
+await checkRegistration("a duplicate CBOR map key", attestation: duplicateKey)
+
+print("\nCBOR MALLEABILITY\n")
+
+await checkRegistration("one trailing zero byte", attestation: validAttestation + [0x00])
+await checkRegistration("a second complete CBOR item appended",
+                        attestation: validAttestation + [0xA1, 0x61, 0x78, 0x01])
+await checkRegistration("1024 bytes of padding appended",
+                        attestation: validAttestation + [UInt8](repeating: 0xFF, count: 1024))
+
+let extraKey: [UInt8] = [0xA4]
+    + textString("fmt") + textString("none")
+    + textString("attStmt") + [0xA0]
+    + textString("authData") + byteString(validAuthData)
+    + textString("extra") + textString("ignored")
+await checkRegistration("an unknown fourth key inside the map", attestation: extraKey)
+
+let nonCanonicalLength: [UInt8] = [0xA3]
+    + textString("fmt") + [0x78, 0x04] + Array("none".utf8)
+    + textString("attStmt") + [0xA0]
+    + textString("authData") + byteString(validAuthData)
+await checkRegistration("a non-canonical string length", attestation: nonCanonicalLength)
+
+var indefinite: [UInt8] = [0xBF]
+indefinite += textString("fmt") + textString("none")
+indefinite += textString("attStmt") + [0xA0]
+indefinite += textString("authData") + byteString(validAuthData)
+indefinite += [0xFF]
+await checkRegistration("an indefinite-length map", attestation: indefinite)
+
+print("\nAUTHENTICATION\n")
+
+try checkAuthentication("a valid assertion", reported: 5, stored: 4, backedUp: false)
+try checkAuthentication("a signature over different bytes", reported: 5, stored: 4, backedUp: false, corrupt: true)
+try checkAuthentication("a signature by a key nobody registered", reported: 5, stored: 4, backedUp: false, foreignKey: true)
+
+print("\nCOUNTER POLICY\n")
+
+try checkAuthentication("0 → 0, not backed up  (counter unsupported)", reported: 0, stored: 0, backedUp: false)
+try checkAuthentication("0 → 0, backed up      (the Apple case)", reported: 0, stored: 0, backedUp: true)
+try checkAuthentication("8 → 9, not backed up  (normal advance)", reported: 9, stored: 8, backedUp: false)
+try checkAuthentication("8 → 9, backed up", reported: 9, stored: 8, backedUp: true)
+try checkAuthentication("8 → 8, not backed up  (stalled)", reported: 8, stored: 8, backedUp: false)
+try checkAuthentication("8 → 8, backed up", reported: 8, stored: 8, backedUp: true)
+try checkAuthentication("8 → 3, not backed up  (regressed)", reported: 3, stored: 8, backedUp: false)
+try checkAuthentication("8 → 3, backed up", reported: 3, stored: 8, backedUp: true)
+try checkAuthentication("8 → 0, backed up", reported: 0, stored: 8, backedUp: true)
+try checkAuthentication("0 → 5, not backed up  (first advance)", reported: 5, stored: 0, backedUp: false)
+
+// MARK: - Emit the corpus for other languages
+
+let encoder = JSONEncoder()
+encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+let corpusURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    .appendingPathComponent("corpus.json")
+try encoder.encode(corpus).write(to: corpusURL)
 
 print("""
 
-    FINAL: \(agreements) agreements, \(disagreements.count) disagreements
+    \(agreements) agreements, \(disagreements.count) disagreements
+    corpus: \(corpus.count) cases → \(corpusURL.path)
     """)
+
+for (name, mine, other) in disagreements {
+    print("  · \(name): ours \(mine.label), theirs \(other.label)")
+}

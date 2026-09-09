@@ -1,0 +1,32 @@
+"""Builds the agreement matrix from one corpus and each implementation's verdicts."""
+import json
+
+corpus = json.load(open("external-bar/corpus.json"))
+node = json.load(open("oracles/node/verdicts-simplewebauthn.json"))
+py = json.load(open("oracles/python/verdicts-py_webauthn.json"))
+
+names = ["SwiftWebAuthn", "brokenhands", "SimpleWebAuthn", "py_webauthn"]
+rows = [(c["name"], [c["ours"], c["theirs"], node[c["name"]], py[c["name"]]]) for c in corpus]
+
+# Positive control first. An implementation that refuses everything agrees with every negative
+# case and has told you nothing — the same trap the conformance suite in SwiftIdentity fell into.
+print("POSITIVE CONTROL")
+for name in ["a valid none-attestation ceremony", "a valid assertion"]:
+    print(f"  {name:42} {'  '.join(v[:6].ljust(6) for v in dict(rows)[name])}")
+print()
+
+header = f"{'case':46}" + "".join(n[:14].ljust(15) for n in names)
+print(header + "\n" + "-" * len(header))
+
+splits = []
+for name, verdicts in rows:
+    agree = len(set(verdicts)) == 1
+    if not agree:
+        splits.append((name, verdicts))
+    marks = "".join(v.ljust(15) for v in verdicts)
+    print(f"{('  ' if agree else '! ') + name:46}{marks}")
+
+print(f"\n{len(rows) - len(splits)} of {len(rows)} unanimous; {len(splits)} split\n")
+for name, verdicts in splits:
+    with_us = sum(1 for v in verdicts[1:] if v == verdicts[0])
+    print(f"  {name:46} ours={verdicts[0]:7} with us: {with_us}/3")
