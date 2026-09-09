@@ -37,50 +37,112 @@ password.
 ## Architecture
 
 ### Technology Stack
-- **Language:** Swift 6.0+
+- **Language:** Swift 6.2 tools version, targeting macOS 14
 - **Build System:** Swift Package Manager
 - **Testing:** Swift Testing framework
 - **Concurrency:** Swift 6 strict concurrency throughout
-- [Add frameworks: SwiftUI, SwiftData, Vapor, etc.]
-- [Add dependencies: BusinessMath, etc.]
+- **`swift-crypto`** — every primitive. P-256 and Ed25519 verification, SHA-256. Nothing
+  cryptographic is implemented in this package.
+- **`swift-docc-plugin`** — the documentation catalogue the gate requires.
+
+No CBOR dependency, deliberately: see Key Differentiators.
 
 ### Module Structure
 
 ```
-Sources/[ProjectName]/
-├── [Describe your source layout here]
-└── ...
+Sources/SwiftWebAuthn/
+├── CBOR/        the subset an attestation object uses, and its refusals
+├── COSE/        public key parsing, and the algorithms verified
+├── Model/       authenticator data — the one structure that is not CBOR
+└── Ceremony/    registration, client data, challenges, base64url
 ```
+
+Planned and not yet present: `Attestation/` as a directory of its own, once more than `none`
+and self attestation are understood; and a second library product, `SwiftWebAuthnIdentity`,
+carrying the `SwiftIdentity` adapter (ADR-002).
 
 ### Key Types
 
 | Type | Purpose |
 |------|---------|
-| `[TypeName]` | [What it does] |
+| `CBOR` | The decoded subset, and `Failure` — mostly a list of what is refused |
+| `COSEPublicKey` | A registered public key, stored in the form its verifier takes |
+| `AuthenticatorData` | The fixed-layout structure an authenticator signs over |
+| `AttestationObject` | `fmt`, `attStmt`, `authData`, plus the raw bytes a signature covers |
+| `CollectedClientData` | What the browser says the ceremony was, and the bytes it said it in |
+| `Challenge` | A nonce this package generates and compares but never stores |
+| `RelyingParty` | The verifier: one party, and the ceremonies it will accept |
+| `RegisteredCredential` | What a consumer persists — never a secret, only a public key |
+| `Base64URL` | The encoding every WebAuthn field arrives in |
 
 ### Data Flow
 
 ```
-[Describe the primary data pipeline from input to output]
+Registration
+  clientDataJSON ─┬─► CollectedClientData ─► type, challenge, origin checked
+                  └─► SHA-256 ──────────────┐
+  attestationObject ─► AttestationObject ─► AuthenticatorData ─► COSEPublicKey
+                          │                      │                    │
+                          └── attStmt ───────────┴── signature ───────┘
+                                                          │
+                                                    RegisteredCredential
 ```
+
+The raw bytes travel alongside the parsed forms throughout, because signatures are computed over
+bytes and re-encoding a parsed structure produces different ones.
 
 ---
 
 ## Core Architectural Decisions
 
-1. [Decision 1 — what you chose and why.]
-2. [Decision 2]
-3. [Add more as needed]
+1. **Written from the specification**, with `brokenhandsio/swift-webauthn` kept as an external
+   bar rather than a starting point. Recorded with its counterargument intact as **ADR-001**,
+   including the condition under which this package should be abandoned for that one.
+2. **Passkeys reach `SwiftIdentity` through an adapter product**, `SwiftWebAuthnIdentity`, not
+   through a dependency — so a consumer whose clients cannot run a ceremony links none of this.
+   **ADR-002**, and the answer to the proposal's §10.1.
+3. **A CBOR decoder for the subset, refusing everything else.** Non-canonical integers,
+   duplicate keys, tags, floats, indefinite lengths and trailing bytes are all refused, each
+   because it is a difference an attacker can choose and a verifier would not see.
+4. **Attestation is believed only as far as it can be verified.** `none` and self attestation;
+   every other format refused by name. An attestation trusted because it was not understood is
+   worse than none.
+5. **Challenge storage and the randomness source are both the consumer's.** This package
+   generates and compares; it never remembers, and it does not silently choose a generator. A
+   security decision hidden inside a library is invisible.
+6. **RS256 is refused loudly** rather than omitted quietly, so an unsupported algorithm can
+   never read as a ceremony that succeeded.
 
 ---
 
 ## Current Status
 
 ### What's Working
-- [ ] [List completed milestones]
+- [x] Proposal approved 2026-09-08, all four open questions answered
+- [x] ADR-001 and ADR-002 recorded
+- [x] **CBOR subset decoder** — 22 tests, the refusals outnumbering the shapes
+- [x] **COSE public key parsing** — ES256 and EdDSA, keys constructed rather than measured,
+      RS256 refused by name
+- [x] **Authenticator data** — fixed layout, flags, big-endian counter, attested credential
+      whose public key carries no length
+- [x] **Base64URL and collected client data**, keeping the bytes a signature was made over
+- [x] **`Challenge`**, generated from an injected generator
+- [x] **The registration ceremony**, every clause of §7.1 a named error and a named test,
+      including a self-attestation signature verified for real
 
 ### What's Next
-- [ ] [List upcoming work items]
+- [ ] **The authentication ceremony** (§7.2) and the counter handling that goes with it —
+      including the backup-flag rule from §10.3, which is currently a reading of the
+      specification and not yet checked against a real device
+- [ ] **The options types both ceremonies need** — `PublicKeyCredentialCreationOptions` and
+      `PublicKeyCredentialRequestOptions`. Deliberately not built alongside registration: they
+      are one consistent piece of work and splitting them would have produced two half-shapes
+- [ ] **`SwiftWebAuthnIdentity`** — the adapter product, `PasskeyAssertion: Credential`
+- [ ] **Ceremonies captured from real devices as fixtures**, which §6.2 calls the most valuable
+      vectors available and which nothing here has yet
+- [ ] **The external bar** — `brokenhandsio/swift-webauthn`'s public suite, run against this
+      implementation once the API is stable. Until it is run, this package has been checked by
+      one party
 
 ---
 
@@ -116,15 +178,28 @@ This principle is operationalized in the **Adversarial Review** step of `design_
 
 ## Roadmap
 
-### Phase 1: [Name]
-- [ ] [Milestone]
+### Phase 1: Registration — **complete**
+- [x] CBOR subset, COSE keys, authenticator data, client data, challenges
+- [x] `verifyRegistration`, with `none` and self attestation
 
-### Phase 2: [Name]
-- [ ] [Milestone]
+### Phase 2: Authentication
+- [ ] `verifyAuthentication` (§7.2)
+- [ ] Signature-counter regression, gated on the backup flags
+- [ ] Options types for both ceremonies
+
+### Phase 3: Integration and evidence
+- [ ] `SwiftWebAuthnIdentity` adapter product
+- [ ] Real-device fixtures
+- [ ] The external bar run deliberately
 
 ### Future
-- [Ideas not yet committed to]
+- Full `packed` / `tpm` / `apple-appattest` attestation, **only** if something needs to
+  distinguish authenticator makes. Requires the FIDO Metadata Service and keeping it fresh.
+- RS256, only if a device requires it.
 
 ---
 
-**Last Updated:** 2026-09-02 (created; scaffolded from development-guidelines v2.3.0)
+**Last Updated:** 2026-09-08 — proposal approved and §10 answered; ADR-001 and ADR-002 recorded;
+Phase 1 (registration) implemented and reconciled here. Scaffold placeholders in Technology
+Stack, Module Structure, Key Types, Data Flow, Core Architectural Decisions, Current Status and
+Roadmap were replaced with what is actually true, having survived from the 2026-09-02 scaffold.
