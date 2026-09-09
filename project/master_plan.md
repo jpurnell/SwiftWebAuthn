@@ -118,6 +118,7 @@ bytes and re-encoding a parsed structure produces different ones.
 ## Current Status
 
 ### What's Working
+- [x] SwiftWebAuthn
 - [x] Proposal approved 2026-09-08, all four open questions answered
 - [x] ADR-001 and ADR-002 recorded
 - [x] **CBOR subset decoder** — 22 tests, the refusals outnumbering the shapes
