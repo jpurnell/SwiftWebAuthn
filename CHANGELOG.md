@@ -7,6 +7,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0] — 2026-09-10
+
+First tagged version. The bar for tagging was set deliberately and is now met: **a real ceremony
+has been verified end to end**, from an Apple platform authenticator, and the implementation has
+been checked against three others in three languages.
+
+**What is verified, and by whom:** 108 tests; both ceremonies against ceremonies captured from
+real hardware; 25 of 32 corpus cases unanimous across four independent implementations, with
+every remaining difference characterised in `project/external-bar/`.
+
+**What is not claimed.** Attestation beyond `none` and self is refused rather than checked.
+RS256 is refused. Only the zero signature-counter path has met real hardware. And all four
+implementations read the same specification, so a differential test cannot see a step every one
+of them skipped.
+
 ### Added
 
 - **The registration ceremony, verified clause by clause against §7.1.** Every step is a named
@@ -135,3 +152,6 @@ them skipped. Only the zero signature-counter path has met real hardware.
   existing implementation kept as an external bar rather than a starting point.
 
 The proposal came before the code, and the code came before this entry claimed anything.
+
+[Unreleased]: https://github.com/jpurnell/SwiftWebAuthn/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.1.0

@@ -4,7 +4,9 @@
 option sets, and the `SwiftIdentity` adapter. What remains is **evidence**, not code.
 
 **Last updated:** 2026-09-08
-**Branch:** `main`, clean, pushed to `github.com/jpurnell/SwiftWebAuthn` (**private**). No tags.
+**Branch:** `main`, clean, pushed to `github.com/jpurnell/SwiftWebAuthn` (**private**). Tagged
+**`0.1.0`** on 2026-09-10, once the bar set for it was met: a real ceremony verified end to end,
+and the external bar run against three other implementations.
 **State:** **103 tests** across two test targets, `quality-gate --no-cache` **0 errors, 0
 warnings, 45 of 45 checkers**, documentation coverage 100%.
 **Depends on:** `SwiftIdentity` **0.1.0** (private), consumed only by the adapter product.
@@ -126,6 +128,6 @@ on disk has already been proved.
 - **`.quality-gate.yml` names the judgement corpus** and says why in the file: deleting the block
   would not fail the consistency checker, it would make it *skip*. Path is relative. Revisit if
   this package is ever made public.
-- **No tag.** Nothing is released. The ceremonies exist now, so the bar has moved: **do not tag
-  until a real ceremony has been verified end to end**, because a version number is a claim that
-  this works against a device and nothing here has met one.
+- ~~**No tag.**~~ **0.1.0, 2026-09-10.** The bar — a real ceremony verified end to end — was met
+  on 2026-09-08, and the external bar followed. A version number is a claim that this works
+  against a device, and now one does.
