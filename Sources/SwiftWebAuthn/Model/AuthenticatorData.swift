@@ -69,6 +69,19 @@ public struct AuthenticatorData: Sendable, Equatable {
     /// The credential created, present only on registration.
     public let attestedCredential: AttestedCredential?
 
+    /// Extension output, exactly as it arrived, or nil when the flag is clear.
+    ///
+    /// **Carried, not parsed.** This package reads no extension, so decoding one would buy
+    /// nothing — and it used to cost something. Extension output is the last thing in
+    /// authenticator data, so its end is the end of the buffer; the only reason to decode it was
+    /// to find that boundary, which is already known.
+    ///
+    /// Refusing output this package could not decode meant refusing a **login**, repeatedly, to
+    /// guard against bytes the authenticator itself had signed — so an attacker could not have
+    /// put them there, and nothing here would have read them if they had. A consumer that does
+    /// use an extension can decode these bytes itself.
+    public let extensionOutput: [UInt8]?
+
     /// Parses authenticator data.
     ///
     /// - Parameter bytes: The complete structure. Anything left unaccounted for is a failure —
@@ -128,10 +141,19 @@ public struct AuthenticatorData: Sendable, Equatable {
         }
 
         if flags.hasExtensionData {
-            let (_, consumed) = try CBOR.decodePrefix(Array(bytes[cursor...]))
-            cursor += consumed
+            // Everything that remains, taken as-is. Extension output is terminal, so "the rest"
+            // is exactly right — and it is the only field here whose length nothing declares.
+            guard cursor < bytes.count else {
+                throw Failure.truncated(expected: cursor + 1, actual: bytes.count)
+            }
+            self.extensionOutput = Array(bytes[cursor...])
+            cursor = bytes.count
+        } else {
+            self.extensionOutput = nil
         }
 
+        // Still refused when nothing declared them: bytes past a structure whose every field has
+        // been accounted for are bytes no step will examine.
         guard cursor == bytes.count else {
             throw Failure.trailingBytes(count: bytes.count - cursor)
         }

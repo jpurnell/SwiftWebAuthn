@@ -34,12 +34,13 @@ caught it.
 
 ## Result, 2026-09-09
 
-**24 of 29 unanimous across all four.** Every security-critical case is unanimous: the challenge,
+**25 of 32 unanimous across all four.** Every security-critical case is unanimous: the challenge,
 the origin, the relying party hash, the ceremony type, user presence, user verification, the
 signature, an unverifiable attestation format, a duplicate CBOR map key, and all ten
 signature-counter cases.
 
-The five splits are all one topic — how strict a CBOR decoder should be:
+The seven splits are all one topic — how strict a CBOR decoder should be, and the section below
+argues that the right answer is not the same in both ceremonies:
 
 | Payload | Ours | brokenhands | SimpleWebAuthn | py_webauthn | With us |
 |---|---|---|---|---|---|
@@ -49,9 +50,67 @@ The five splits are all one topic — how strict a CBOR decoder should be:
 | A non-canonical string length | reject | accept | reject | accept | 1/3 |
 | An indefinite-length map | reject | accept | reject | accept | 1/3 |
 | An unknown fourth key *inside* the map | accept | accept | accept | accept | unanimous |
+| An assertion with non-canonical extension output | accept | accept | reject | reject | 1/3 |
+| An assertion with bytes after the extensions | accept | accept | reject | reject | 1/3 |
 
 That last row is the control for this section: a map with an extra key is forward compatibility,
 not malleability, and all four accept it.
+
+## Is the strictness a posture, correctness, or aggression?
+
+Not one answer — three, and they differ by **what is signed** and **how often the failure
+repeats**. That turns out to be the whole of it.
+
+### Tier 1 · Trailing bytes on the attestation object — *posture* (0/3 with us)
+
+For `none` attestation **nothing in the attestation object is signed**. The object is
+trusted-on-first-use and TLS is the only thing protecting it, so an attacker who can append
+bytes can equally replace the entire public key — a strictly stronger attack that trailing bytes
+add nothing to.
+
+So refusing them protects against no attack the alternative doesn't already permit. What it
+does buy is hygiene: nothing unexamined is stored alongside a credential, and no second component
+reading the payload can disagree with us about what it contains.
+
+**Loosening here would be low-risk.** We stay strict because it costs nothing — the failure is
+one-time, at enrolment, and visible — but this is posture rather than protection, and it should
+not be described as their defect.
+
+### Tier 2 · Non-canonical lengths and indefinite-length maps — *correctness* (1/3 with us)
+
+CTAP2 canonical CBOR encoding form is definite-length and shortest-form by definition, so a
+conforming authenticator never emits either of these. Accepting them means accepting encodings no
+conforming device produces.
+
+There is a second, self-interested reason: indefinite-length decoding is extra state machine in
+**our** parser, and ADR-001 names that parser as the most likely thing here to be wrong. Refusing
+a shape means never having to be right about it.
+
+**This is the best-justified strictness of the three**, and here we are not alone.
+
+### Tier 3 · Extension output — *this was aggression, and it is fixed*
+
+Extension output is the last field in authenticator data, and this package **reads no
+extension**. It was decoded for exactly one reason: to find where it ended. That end is the end
+of the buffer.
+
+Meanwhile, on an assertion the extension bytes sit **inside the region the authenticator
+signed**. An attacker cannot put them there without breaking the signature. So refusing a
+ceremony because those bytes would not decode protected against nothing — and it cost a
+**login**, every single time, for as long as the authenticator kept sending them.
+
+Extension output is now carried verbatim as `AuthenticatorData.extensionOutput` and never parsed.
+A consumer that actually uses an extension can decode the bytes itself, and gets them exactly as
+they arrived — which is more faithful than parse-and-re-encode, the approach py_webauthn takes,
+where a non-canonical input is stored back in canonical form and is no longer the bytes that were
+signed.
+
+### The rule that falls out
+
+**Strictness is cheap where the data is unauthenticated and the failure is one-time. It is
+expensive where a signature already excludes the attacker and the failure repeats.** Registration
+is the first; login is the second. A uniform posture gets one of them wrong, and ours got the
+second one wrong until this was measured.
 
 ## What the extra oracles changed
 

@@ -416,6 +416,43 @@ try checkAuthentication("8 → 3, backed up", reported: 3, stored: 8, backedUp: 
 try checkAuthentication("8 → 0, backed up", reported: 0, stored: 8, backedUp: true)
 try checkAuthentication("0 → 5, not backed up  (first advance)", reported: 5, stored: 0, backedUp: false)
 
+print("\nEXTENSION OUTPUTS — the login path, where strictness is not free\n")
+
+/// An assertion carrying extension output, which rides inside signed authenticator data.
+@MainActor func checkExtensions(_ name: String, extensions: [UInt8], trailing: [UInt8] = []) throws {
+    var data = Array(SHA256.hash(data: Data(relyingPartyID.utf8)))
+    data.append(Flags.userPresent | Flags.userVerified | 0x80)   // ED set
+    data += [0, 0, 0, 5]
+    data += extensions
+    data += trailing
+
+    let hash = Array(SHA256.hash(data: Data(assertionClient)))
+    let signature = Array(try privateKey.signature(for: Data(data + hash)).derRepresentation)
+
+    let mine = ourAuthentication(clientDataJSON: assertionClient, authData: data, signature: signature,
+                                 challenge: authChallenge, storedCounter: 4, storedBackedUp: false, requireUV: true)
+    let other = theirAuthentication(clientDataJSON: assertionClient, authData: data, signature: signature,
+                                    challenge: authChallenge, storedCounter: 4, requireUV: true)
+    compare(name, mine, other)
+    record(name, ceremony: "authentication", mine: mine, other: other,
+           clientDataJSON: assertionClient, challenge: authChallenge, requireUV: true,
+           authData: data, signature: signature, cose: coseKey,
+           storedCounter: 4, storedBackedUp: false)
+}
+
+// {"credProps": {"rk": true}} — canonical, and what a browser actually sends.
+let credProps: [UInt8] = [0xA1]
+    + textString("credProps") + [0xA1] + textString("rk") + [0xF5]
+try checkExtensions("an assertion with canonical extension output", extensions: credProps)
+
+// The same map with a non-canonical text length: 9 encoded in a following byte.
+let nonCanonicalExtensions: [UInt8] = [0xA1]
+    + [0x78, 0x09] + Array("credProps".utf8) + [0xA1] + textString("rk") + [0xF5]
+try checkExtensions("an assertion with non-canonical extension output", extensions: nonCanonicalExtensions)
+
+// Extension output followed by bytes nothing declared.
+try checkExtensions("an assertion with bytes after the extensions", extensions: credProps, trailing: [0x00])
+
 // MARK: - Emit the corpus for other languages
 
 let encoder = JSONEncoder()
