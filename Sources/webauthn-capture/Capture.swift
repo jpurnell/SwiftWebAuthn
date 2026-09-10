@@ -1,6 +1,7 @@
 #if canImport(os)
 import os
 #endif
+import CaptureHTTP
 import Foundation
 import SwiftWebAuthn
 

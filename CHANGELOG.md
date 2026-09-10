@@ -7,7 +7,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **The capture tool's HTTP parsing had no tests at all.** The quality gate found three defects in
+  it — a CRLF split that Swift's `Character` semantics make invisible, two unbounded loops, and a
+  body read with no cap — by *reading* the code. Nothing had ever executed it, because the parsing
+  lived in an executable target and an executable target cannot be imported by tests.
+
+  It is now the `CaptureHTTP` target, with the byte-level decision extracted as a pure function
+  over `Data`, and **15 tests written from the attacker's side**: a bare LF that must not
+  terminate a header block, a lone CR that must not split one, a body longer than declared, a
+  declared length past the cap, and a request line that is not valid UTF-8.
+
+  Writing them found one more: **two `Content-Length` headers that disagree were resolved rather
+  than refused.** Whichever value this parser chose, something in front of it might choose the
+  other, and the difference between them is a second request nobody authorised. Refused now,
+  under a refusal named for that fault rather than for size.
+
+  No new dependency. The tool still uses `Network.framework`; what changed is that the part which
+  can be wrong is now reachable by a test.
 
 ## [0.1.0] — 2026-09-10
 

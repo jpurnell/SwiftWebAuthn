@@ -47,9 +47,26 @@ let package = Package(
         // A development tool, deliberately **not** vended as a product: nobody can depend on
         // it. It mints challenges and writes files, which is exactly what a library must never
         // do on a consumer's behalf. `swift run webauthn-capture` inside this repo.
+        // The capture tool's HTTP parsing, split out from the executable for one reason: an
+        // executable target cannot be imported by tests, so the parser had none. The quality
+        // gate found three defects in it by reading — a CRLF split, two unbounded loops, an
+        // uncapped read — and nothing had ever executed it.
+        .target(
+            name: "CaptureHTTP",
+            swiftSettings: [
+                .enableUpcomingFeature("ApproachableConcurrency"),
+            ]
+        ),
+        .testTarget(
+            name: "CaptureHTTPTests",
+            dependencies: ["CaptureHTTP"],
+            swiftSettings: [
+                .enableUpcomingFeature("ApproachableConcurrency"),
+            ]
+        ),
         .executableTarget(
             name: "webauthn-capture",
-            dependencies: ["SwiftWebAuthn"],
+            dependencies: ["SwiftWebAuthn", "CaptureHTTP"],
             swiftSettings: [
                 .enableUpcomingFeature("ApproachableConcurrency"),
             ]
