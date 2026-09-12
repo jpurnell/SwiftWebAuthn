@@ -152,7 +152,7 @@ public struct VerifiedAuthentication: Sendable, Equatable {
     /// Builds an outcome.
     ///
     /// Public for the same reason ``RegisteredCredential/init(id:publicKey:signCount:isBackupEligible:isBackedUp:aaguid:attestationFormat:)``
-    /// is: ``SwiftWebAuthnIdentity/PasskeyDirectory`` requires a consumer to *handle* one of
+    /// is: `PasskeyDirectory` requires a consumer to *handle* one of
     /// these, and a consumer that cannot construct one cannot write a test for the half of
     /// their directory that persists the counter. That half is the one the protocol's own
     /// documentation calls out as silently breakable — a directory that ignores `record` keeps
