@@ -7,6 +7,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] — 2026-09-11
+
 ### Added
 
 - **`VerifiedAuthentication` can now be constructed by a consumer.** `PasskeyDirectory` requires
@@ -186,5 +190,6 @@ them skipped. Only the zero signature-counter path has met real hardware.
 
 The proposal came before the code, and the code came before this entry claimed anything.
 
-[Unreleased]: https://github.com/jpurnell/SwiftWebAuthn/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/jpurnell/SwiftWebAuthn/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.2.0
 [0.1.0]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.1.0
