@@ -7,6 +7,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`VerifiedAuthentication` can now be constructed by a consumer.** `PasskeyDirectory` requires
+  an implementor to *handle* one in `record(_:)`, and only this package could make one — so a
+  consumer could not write a test for the half of their directory that persists the signature
+  counter.
+
+  That is precisely the half the protocol's own documentation calls out as silently breakable: a
+  directory that ignores `record` leaves every assertion compared against the counter captured at
+  registration, so the clone check stops detecting anything while continuing to look like it
+  works. Leaving it untestable outside this package was the wrong trade, and `RegisteredCredential`
+  had already made the opposite call for the same reason.
+
+  Found by VaultMCP's web view, the first consumer to implement the protocol.
+
 ### Fixed
 
 - **The capture tool's HTTP parsing had no tests at all.** The quality gate found three defects in

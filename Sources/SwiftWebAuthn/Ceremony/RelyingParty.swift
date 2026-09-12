@@ -148,6 +148,36 @@ public struct VerifiedAuthentication: Sendable, Equatable {
     /// False when **both** counters are zero: an authenticator that keeps no counter has not
     /// stalled, it has nothing to stall. That is the ordinary case on Apple hardware.
     public let counterStalled: Bool
+
+    /// Builds an outcome.
+    ///
+    /// Public for the same reason ``RegisteredCredential/init(id:publicKey:signCount:isBackupEligible:isBackedUp:aaguid:attestationFormat:)``
+    /// is: ``SwiftWebAuthnIdentity/PasskeyDirectory`` requires a consumer to *handle* one of
+    /// these, and a consumer that cannot construct one cannot write a test for the half of
+    /// their directory that persists the counter. That half is the one the protocol's own
+    /// documentation calls out as silently breakable — a directory that ignores `record` keeps
+    /// looking like it works — so leaving it untestable outside this package was the wrong
+    /// trade.
+    ///
+    /// - Parameters:
+    ///   - credentialID: The credential that answered.
+    ///   - newSignCount: The counter to store.
+    ///   - userVerified: Whether the person was identified rather than merely present.
+    ///   - isBackedUp: Whether the credential is now backed up.
+    ///   - counterStalled: Whether the counter failed to advance.
+    public init(
+        credentialID: [UInt8],
+        newSignCount: UInt32,
+        userVerified: Bool,
+        isBackedUp: Bool,
+        counterStalled: Bool
+    ) {
+        self.credentialID = credentialID
+        self.newSignCount = newSignCount
+        self.userVerified = userVerified
+        self.isBackedUp = isBackedUp
+        self.counterStalled = counterStalled
+    }
 }
 
 /// The server side of WebAuthn: one relying party, and the ceremonies it will verify.
