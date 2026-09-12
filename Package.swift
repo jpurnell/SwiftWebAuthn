@@ -27,6 +27,10 @@ let package = Package(
     dependencies: [
         // ES256 and Ed25519 verification, and SHA-256 over client data and the RP ID.
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+        // Seeded generators for the test targets, and only for them. Absent from every
+        // non-test target on purpose: reproducibility is `SplitMix64`'s guarantee, and
+        // unpredictability is the contract of everything this package mints.
+        .package(url: "git@github.com:jpurnell/SwiftDeterminism.git", from: "1.1.0"),
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3"),
         // Consumed only by the adapter product, so a deployment that never uses passkeys
         // never resolves it. Pinned to a version rather than a branch: a branch dependency
@@ -59,7 +63,8 @@ let package = Package(
         ),
         .testTarget(
             name: "CaptureHTTPTests",
-            dependencies: ["CaptureHTTP"],
+            dependencies: [
+                .product(name: "SwiftDeterminism", package: "SwiftDeterminism"),"CaptureHTTP"],
             swiftSettings: [
                 .enableUpcomingFeature("ApproachableConcurrency"),
             ]
@@ -83,7 +88,8 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftWebAuthnTests",
-            dependencies: ["SwiftWebAuthn"],
+            dependencies: [
+                .product(name: "SwiftDeterminism", package: "SwiftDeterminism"),"SwiftWebAuthn"],
             // Ceremonies captured from a real Apple platform authenticator. Copied rather than
             // processed: these are exact bytes, and a resource pipeline that normalised anything
             // would change what the signatures cover.
@@ -95,6 +101,7 @@ let package = Package(
         .testTarget(
             name: "SwiftWebAuthnIdentityTests",
             dependencies: [
+                .product(name: "SwiftDeterminism", package: "SwiftDeterminism"),
                 "SwiftWebAuthnIdentity",
                 .product(name: "SwiftIdentityConformance", package: "SwiftIdentity"),
             ],

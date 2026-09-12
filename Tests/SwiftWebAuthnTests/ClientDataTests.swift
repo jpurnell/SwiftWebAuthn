@@ -1,4 +1,5 @@
 import Foundation
+import SwiftDeterminism
 import Testing
 @testable import SwiftWebAuthn
 
@@ -100,43 +101,28 @@ struct CollectedClientDataTests {
 @Suite("Challenge")
 struct ChallengeTests {
 
-    /// A seeded generator, so the assertions below are about the code and not about luck.
-    ///
-    /// SplitMix64 — small, well-known, and emphatically not for production use, which is why it
-    /// lives in the tests and `Challenge.random()` reaches for the system's generator instead.
-    struct SeededGenerator: RandomNumberGenerator {
-        var state: UInt64
-        mutating func next() -> UInt64 {
-            state &+= 0x9E3779B97F4A7C15
-            var z = state
-            z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
-            z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
-            return z ^ (z >> 31)
-        }
-    }
-
     @Test("the length asked for")
     func lengthIsRespected() {
-        var generator = SeededGenerator(state: 1)
+        var generator = SplitMix64(seed: 1)
         #expect(Challenge.random(using: &generator).bytes.count == 32)
         #expect(Challenge.random(byteCount: 16, using: &generator).bytes.count == 16)
     }
 
     @Test("a seeded generator produces the same challenge twice, so the draw is the generator's")
     func generationIsDrivenEntirelyByTheGenerator() {
-        var first = SeededGenerator(state: 42)
-        var second = SeededGenerator(state: 42)
+        var first = SplitMix64(seed: 42)
+        var second = SplitMix64(seed: 42)
         #expect(Challenge.random(using: &first) == Challenge.random(using: &second))
 
         // And a different seed gives a different challenge, which is the failure that actually
         // happens: a generator wired up to return a constant.
-        var third = SeededGenerator(state: 43)
+        var third = SplitMix64(seed: 43)
         #expect(Challenge.random(using: &first) != Challenge.random(using: &third))
     }
 
     @Test("successive draws from one generator differ")
     func successiveDrawsDiffer() {
-        var generator = SeededGenerator(state: 7)
+        var generator = SplitMix64(seed: 7)
         let drawn = Set((0..<8).map { _ in Challenge.random(using: &generator).bytes })
         #expect(drawn.count == 8)
     }

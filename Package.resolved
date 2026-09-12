@@ -1,5 +1,5 @@
 {
-  "originHash" : "f3103c6270de6d01d4c331451f135e3a8080a3be21248bfd3a2e9221041e6efd",
+  "originHash" : "864d2d64aee997790ef4675b18cc38b19709b77b66aa15c31a3d417f0496fbec",
   "pins" : [
     {
       "identity" : "swift-asn1",
@@ -35,6 +35,15 @@
       "state" : {
         "revision" : "b45d1f2ed151d057b54504d653e0da5552844e34",
         "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "swiftdeterminism",
+      "kind" : "remoteSourceControl",
+      "location" : "git@github.com:jpurnell/SwiftDeterminism.git",
+      "state" : {
+        "revision" : "6c48c1029adf5df1b739f520cdf4e23a2d1ba8c1",
+        "version" : "1.1.0"
       }
     },
     {
