@@ -9,6 +9,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Nothing yet.
 
+## [0.2.1] — 2026-10-21
+
+No API changes. The release that makes the package publishable.
+
+### Changed
+
+- **Licensed MIT.**
+- **SwiftIdentity now comes from its public repository**, `jpurnell/swift-identity` (0.6.3 or
+  later). The package identity follows the URL, so the adapter's product references name
+  `swift-identity`. A consumer that also depends on SwiftIdentity directly must use the same URL,
+  or two packages will vend one module.
+- **Both portfolio dependencies resolve over HTTPS.** The `git@github.com:` URLs worked only for a
+  machine holding a GitHub SSH key.
+- **The README's status said "Nothing is implemented"** through two releases of implementation.
+  It now says what exists.
+- **A manifest comment claimed a deployment without passkeys "never resolves" SwiftIdentity.**
+  It is never *linked*, but SwiftPM resolves every package-level dependency. Corrected.
+
 ## [0.2.0] — 2026-09-11
 
 ### Added
@@ -190,6 +208,7 @@ them skipped. Only the zero signature-counter path has met real hardware.
 
 The proposal came before the code, and the code came before this entry claimed anything.
 
-[Unreleased]: https://github.com/jpurnell/SwiftWebAuthn/compare/0.2.0...HEAD
+[Unreleased]: https://github.com/jpurnell/SwiftWebAuthn/compare/0.2.1...HEAD
+[0.2.1]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.2.1
 [0.2.0]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.2.0
 [0.1.0]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.1.0

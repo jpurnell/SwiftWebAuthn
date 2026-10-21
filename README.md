@@ -20,11 +20,21 @@ checks the specification's steps in order, and refuses everything it does not un
 
 ## Status
 
-**Design stage.** Nothing is implemented. The proposal is at
-`project/plans/proposals/RelyingPartyImplementation.md` — including the bar at which this
-package should be abandoned in favour of the maintained one, written down before any code
-exists.
+**0.2.1: implemented and in use**, pre-1.0. Registration and authentication ceremonies are
+verified step by step from the W3C specification: CBOR and COSE parsing, ES256 and Ed25519,
+origin and RP ID checks, and signature-counter clone detection that reads the backup flags.
+`SwiftWebAuthnIdentity` makes a passkey one more SwiftIdentity credential, resolved by a store
+that passes SwiftIdentity's conformance suite.
+
+Verified against `swift-server/webauthn-swift` as an **external bar**: the same bytes are judged by
+both implementations. Two disagreements were found and are recorded as policy, not correctness.
+The proposal kept a written-down bar at which this package should be abandoned in favour of the
+maintained one; it has not been reached.
 
 ## Requirements
 
 Swift 6.2+, macOS 14+.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

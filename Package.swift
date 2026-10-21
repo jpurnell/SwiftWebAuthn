@@ -30,13 +30,14 @@ let package = Package(
         // Seeded generators for the test targets, and only for them. Absent from every
         // non-test target on purpose: reproducibility is `SplitMix64`'s guarantee, and
         // unpredictability is the contract of everything this package mints.
-        .package(url: "git@github.com:jpurnell/SwiftDeterminism.git", from: "1.1.0"),
+        .package(url: "https://github.com/jpurnell/SwiftDeterminism.git", from: "1.1.0"),
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3"),
-        // Consumed only by the adapter product, so a deployment that never uses passkeys
-        // never resolves it. Pinned to a version rather than a branch: a branch dependency
+        // Consumed only by the adapter product, so a deployment that never uses passkeys never
+        // links it. It is still resolved: SwiftPM resolves every package-level dependency, which
+        // consumers' lockfiles show. Pinned to a version rather than a branch: a branch dependency
         // gives a consumer no way to say which version it was built against, which the
         // dependency auditor says out loud.
-        .package(url: "git@github.com:jpurnell/SwiftIdentity.git", from: "0.1.0"),
+        .package(url: "https://github.com/jpurnell/swift-identity.git", from: "0.6.3"),
     ],
     targets: [
         .target(
@@ -80,7 +81,7 @@ let package = Package(
             name: "SwiftWebAuthnIdentity",
             dependencies: [
                 "SwiftWebAuthn",
-                .product(name: "SwiftIdentity", package: "SwiftIdentity"),
+                .product(name: "SwiftIdentity", package: "swift-identity"),
             ],
             swiftSettings: [
                 .enableUpcomingFeature("ApproachableConcurrency"),
@@ -103,7 +104,7 @@ let package = Package(
             dependencies: [
                 .product(name: "SwiftDeterminism", package: "SwiftDeterminism"),
                 "SwiftWebAuthnIdentity",
-                .product(name: "SwiftIdentityConformance", package: "SwiftIdentity"),
+                .product(name: "SwiftIdentityConformance", package: "swift-identity"),
             ],
             swiftSettings: [
                 .enableUpcomingFeature("ApproachableConcurrency"),
