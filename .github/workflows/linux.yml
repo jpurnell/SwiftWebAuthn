@@ -1,0 +1,20 @@
+name: Linux
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # The image geo-audit's Fly build uses, so a pass here is evidence about that build.
+    runs-on: ubuntu-latest
+    container: swift:6.2-jammy
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
