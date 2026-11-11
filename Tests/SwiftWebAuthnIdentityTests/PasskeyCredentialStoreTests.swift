@@ -57,10 +57,12 @@ struct PasskeyCredentialStoreTests {
         let credentialID = Array("credential-\(id)".utf8)
 
         // A COSE key, assembled the way an authenticator would send one.
-        let cose: [UInt8] = [0xA5]
-            + [0x01, 0x02] + [0x03, 0x26] + [0x20, 0x01]
-            + [0x21, 0x58, 0x20] + Array(x963[1..<33])
-            + [0x22, 0x58, 0x20] + Array(x963[33..<65])
+        // Built in steps: one long `+` chain is too slow for the Linux type-checker.
+        var cose: [UInt8] = [0xA5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01]
+        cose += [0x21, 0x58, 0x20]
+        cose += Array(x963[1..<33])
+        cose += [0x22, 0x58, 0x20]
+        cose += Array(x963[33..<65])
 
         var authData = Array(SHA256.hash(data: Data("example.com".utf8)))
         authData.append(0x01 | 0x04)                       // present, verified
