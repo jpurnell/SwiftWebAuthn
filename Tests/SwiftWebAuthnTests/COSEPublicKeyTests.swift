@@ -76,10 +76,11 @@ struct COSEPublicKeyTests {
         let truncated = Array(point.x[0..<31]) + [0x00] // still 32 to build, then cut the y
         _ = truncated
         #expect(throws: COSEPublicKey.Failure.malformedCoordinate(label: -3, expected: 32, actual: 31)) {
-            try COSEPublicKey([0xA5]
-                + [0x01, 0x02] + [0x03, 0x26] + [0x20, 0x01]
-                + [0x21] + Fixtures.byteString(point.x)
-                + [0x22, 0x58, 0x1F] + Array(point.y[0..<31]))
+            try COSEPublicKey(Fixtures.bytes(
+                [0xA5], [0x01, 0x02], [0x03, 0x26], [0x20, 0x01],
+                [0x21], Fixtures.byteString(point.x),
+                [0x22, 0x58, 0x1F], Array(point.y[0..<31])
+            ))
         }
     }
 

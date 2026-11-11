@@ -12,6 +12,12 @@ enum Fixtures {
     // MARK: - CBOR
 
     /// A definite-length byte string header, in the shortest form the decoder accepts.
+    /// Joins byte arrays. Test fixtures use this rather than a long `+` chain, which the Linux
+    /// compiler cannot type-check in reasonable time.
+    static func bytes(_ parts: [UInt8]...) -> [UInt8] {
+        parts.flatMap { $0 }
+    }
+
     static func byteString(_ bytes: [UInt8]) -> [UInt8] {
         if bytes.count < 24 { return [0x40 | UInt8(bytes.count)] + bytes }
         if bytes.count <= 255 { return [0x58, UInt8(bytes.count)] + bytes }
@@ -22,21 +28,18 @@ enum Fixtures {
 
     /// An EC2 COSE key: `{1: 2, 3: alg, -1: crv, -2: x, -3: y}`.
     static func ec2Key(algorithm: [UInt8], curve: [UInt8], x: [UInt8], y: [UInt8]) -> [UInt8] {
-        [0xA5]
-            + [0x01, 0x02]
-            + [0x03] + algorithm
-            + [0x20] + curve
-            + [0x21] + byteString(x)
-            + [0x22] + byteString(y)
+        bytes(
+            [0xA5], [0x01, 0x02], [0x03], algorithm, [0x20], curve,
+            [0x21], byteString(x), [0x22], byteString(y)
+        )
     }
 
     /// An OKP COSE key: `{1: 1, 3: alg, -1: crv, -2: x}`.
     static func okpKey(algorithm: [UInt8], curve: [UInt8], x: [UInt8]) -> [UInt8] {
-        [0xA4]
-            + [0x01, 0x01]
-            + [0x03] + algorithm
-            + [0x20] + curve
-            + [0x21] + byteString(x)
+        bytes(
+            [0xA4], [0x01, 0x01], [0x03], algorithm, [0x20], curve,
+            [0x21], byteString(x)
+        )
     }
 
     /// A real P-256 key, and the pieces COSE carries separately.

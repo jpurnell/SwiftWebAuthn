@@ -163,9 +163,9 @@ struct CBORPrefixTests {
 struct AuthenticatorDataExtensionTests {
 
     /// `{"credProps": {"rk": true}}`, canonically encoded, as a browser sends it.
-    static let credProps: [UInt8] = [0xA1]
-        + [0x69] + Array("credProps".utf8)
-        + [0xA1] + [0x62] + Array("rk".utf8) + [0xF5]
+    static let credProps: [UInt8] = Fixtures.bytes(
+        [0xA1], [0x69], Array("credProps".utf8), [0xA1], [0x62], Array("rk".utf8), [0xF5]
+    )
 
     @Test("canonical extension output is carried through verbatim")
     func canonicalExtensionsAreCarried() throws {
@@ -180,9 +180,9 @@ struct AuthenticatorDataExtensionTests {
     @Test("so is output this package cannot parse, because it never needed to")
     func unparseableExtensionsAreStillCarried() throws {
         // A non-canonical text length: 9 written in a following byte where it fits inline.
-        let nonCanonical: [UInt8] = [0xA1]
-            + [0x78, 0x09] + Array("credProps".utf8)
-            + [0xA1] + [0x62] + Array("rk".utf8) + [0xF5]
+        let nonCanonical: [UInt8] = Fixtures.bytes(
+            [0xA1], [0x78, 0x09], Array("credProps".utf8), [0xA1], [0x62], Array("rk".utf8), [0xF5]
+        )
 
         // Refusing this used to cost a *login*, every time, to protect against nothing: the
         // bytes are inside the region the authenticator signed, so an attacker cannot have put
