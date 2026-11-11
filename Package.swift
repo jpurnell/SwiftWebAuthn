@@ -7,7 +7,7 @@
 
 import PackageDescription
 
-let package = Package(
+var package = Package(
     name: "SwiftWebAuthn",
     platforms: [
         .macOS(.v14),
@@ -49,34 +49,6 @@ let package = Package(
                 .enableUpcomingFeature("ApproachableConcurrency"),
             ]
         ),
-        // A development tool, deliberately **not** vended as a product: nobody can depend on
-        // it. It mints challenges and writes files, which is exactly what a library must never
-        // do on a consumer's behalf. `swift run webauthn-capture` inside this repo.
-        // The capture tool's HTTP parsing, split out from the executable for one reason: an
-        // executable target cannot be imported by tests, so the parser had none. The quality
-        // gate found three defects in it by reading — a CRLF split, two unbounded loops, an
-        // uncapped read — and nothing had ever executed it.
-        .target(
-            name: "CaptureHTTP",
-            swiftSettings: [
-                .enableUpcomingFeature("ApproachableConcurrency"),
-            ]
-        ),
-        .testTarget(
-            name: "CaptureHTTPTests",
-            dependencies: [
-                .product(name: "SwiftDeterminism", package: "SwiftDeterminism"),"CaptureHTTP"],
-            swiftSettings: [
-                .enableUpcomingFeature("ApproachableConcurrency"),
-            ]
-        ),
-        .executableTarget(
-            name: "webauthn-capture",
-            dependencies: ["SwiftWebAuthn", "CaptureHTTP"],
-            swiftSettings: [
-                .enableUpcomingFeature("ApproachableConcurrency"),
-            ]
-        ),
         .target(
             name: "SwiftWebAuthnIdentity",
             dependencies: [
@@ -112,3 +84,38 @@ let package = Package(
         ),
     ]
 )
+
+// The capture tool talks to the platform authenticator through Apple's `Network` framework,
+// which does not exist on Linux, so it and its tests are macOS-only. No product depends on it.
+#if os(macOS)
+package.targets += [
+    // A development tool, deliberately **not** vended as a product: nobody can depend on
+    // it. It mints challenges and writes files, which is exactly what a library must never
+    // do on a consumer's behalf. `swift run webauthn-capture` inside this repo.
+    // The capture tool's HTTP parsing, split out from the executable for one reason: an
+    // executable target cannot be imported by tests, so the parser had none. The quality
+    // gate found three defects in it by reading — a CRLF split, two unbounded loops, an
+    // uncapped read — and nothing had ever executed it.
+    .target(
+        name: "CaptureHTTP",
+        swiftSettings: [
+            .enableUpcomingFeature("ApproachableConcurrency"),
+        ]
+    ),
+    .testTarget(
+        name: "CaptureHTTPTests",
+        dependencies: [
+            .product(name: "SwiftDeterminism", package: "SwiftDeterminism"),"CaptureHTTP"],
+        swiftSettings: [
+            .enableUpcomingFeature("ApproachableConcurrency"),
+        ]
+    ),
+    .executableTarget(
+        name: "webauthn-capture",
+        dependencies: ["SwiftWebAuthn", "CaptureHTTP"],
+        swiftSettings: [
+            .enableUpcomingFeature("ApproachableConcurrency"),
+        ]
+    ),
+]
+#endif

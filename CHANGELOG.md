@@ -7,7 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- A Linux CI job (`.github/workflows/linux.yml`) that builds and tests in the `swift:6.2-jammy`
+  container, the image geo-audit's Fly build uses.
+
+### Fixed
+- `swift build` failed on Linux: the `CaptureHTTP` development tool imports Apple's `Network`
+  framework. The tool, its tests and the `webauthn-capture` executable are now macOS-only in the
+  manifest. No product depended on them, so consumers are unaffected.
 
 ## [0.2.1] — 2026-10-21
 
