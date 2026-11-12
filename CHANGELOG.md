@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-11-11
+
+No API changes. The package now builds and passes its tests on Linux (112 tests on `swift:6.2-jammy`),
+which is what geo-audit's Fly build runs, and is in production there.
+
 ### Added
 - A Linux CI job (`.github/workflows/linux.yml`) that builds and tests in the `swift:6.2-jammy`
   container, the image geo-audit's Fly build uses.
@@ -217,7 +222,8 @@ them skipped. Only the zero signature-counter path has met real hardware.
 
 The proposal came before the code, and the code came before this entry claimed anything.
 
-[Unreleased]: https://github.com/jpurnell/SwiftWebAuthn/compare/0.2.1...HEAD
+[Unreleased]: https://github.com/jpurnell/SwiftWebAuthn/compare/0.2.2...HEAD
+[0.2.2]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.2.2
 [0.2.1]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.2.1
 [0.2.0]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.2.0
 [0.1.0]: https://github.com/jpurnell/SwiftWebAuthn/releases/tag/0.1.0

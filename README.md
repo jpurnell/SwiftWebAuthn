@@ -20,7 +20,7 @@ checks the specification's steps in order, and refuses everything it does not un
 
 ## Status
 
-**0.2.1: implemented and in use**, pre-1.0. Registration and authentication ceremonies are
+**0.2.2: implemented and in use**, pre-1.0. Registration and authentication ceremonies are
 verified step by step from the W3C specification: CBOR and COSE parsing, ES256 and Ed25519,
 origin and RP ID checks, and signature-counter clone detection that reads the backup flags.
 `SwiftWebAuthnIdentity` makes a passkey one more SwiftIdentity credential, resolved by a store
